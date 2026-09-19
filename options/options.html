@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BulkGrab Settings & Licensing</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <img src="../assets/icons/icon-48.png" alt="BulkGrab Logo" class="logo">
+      <h1>BulkGrab Settings & Licensing</h1>
+    </header>
+
+    <div class="card">
+      <h2>License Status</h2>
+      <p id="current-status-text">Status: <strong>Free Plan</strong></p>
+      <div id="license-input-section">
+        <label for="session-id-input">Stripe Checkout Session ID:</label>
+        <input type="text" id="session-id-input" placeholder="cs_test_..." />
+        <button id="btn-activate" class="btn btn-primary">Activate Pro</button>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

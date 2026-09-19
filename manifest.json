@@ -1,0 +1,59 @@
+{
+  "manifest_version": 3,
+  "name": "BulkGrab - Bulk File Downloader",
+  "version": "1.0.0",
+  "description": "Bulk file downloader that detects, selects, and downloads downloadable files from webpages with freemium and ZIP export options.",
+  
+  "_comment_permissions_justification": {
+    "downloads": "Required to download user-selected files (such as PDFs, images, archives, audio, and documents) detected on webpages directly to the user's local Downloads directory without repetitive manual save prompts.",
+    "activeTab": "Required to inspect the current webpage for downloadable media links only when invoked by the user via the extension action, strictly avoiding broad <all_urls> permissions.",
+    "scripting": "Required to dynamically inject the DOM file scanner and interactive floating grabber panel into the active tab on user demand.",
+    "storage": "Required to persist user license status (Free vs. Pro) and track session download counts for free-tier quota enforcement."
+  },
+
+  "permissions": [
+    "downloads",
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+
+  "_comment_host_permissions": "Left empty by default. activeTab and scripting handle active pages upon user action. To scope to specific sites, add URL patterns like 'https://example.com/*' into host_permissions below.",
+  "host_permissions": [],
+
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "BulkGrab",
+    "default_icon": {
+      "16": "assets/icons/icon-16.png",
+      "48": "assets/icons/icon-48.png",
+      "128": "assets/icons/icon-128.png"
+    }
+  },
+
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+
+  "icons": {
+    "16": "assets/icons/icon-16.png",
+    "48": "assets/icons/icon-48.png",
+    "128": "assets/icons/icon-128.png"
+  },
+
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "content/content-style.css",
+        "assets/icons/*"
+      ],
+      "matches": ["http://*/*", "https://*/*"]
+    }
+  ]
+}

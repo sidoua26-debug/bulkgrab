@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BulkGrab</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <img src="../assets/icons/icon-48.png" alt="BulkGrab Logo" class="brand-icon">
+        <div class="brand-text">
+          <h1 class="brand-title">BulkGrab</h1>
+          <span id="tier-badge" class="badge badge-free">Free Plan</span>
+        </div>
+      </div>
+      <a href="#" id="btn-options" class="icon-btn" title="Options & License">⚙️</a>
+    </header>
+
+    <!-- Main Stats / Status Card -->
+    <section class="card status-card">
+      <div class="stat-row">
+        <span class="stat-label">Detected Files:</span>
+        <span id="file-count" class="stat-value">Scanning...</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Session Downloads:</span>
+        <span id="download-quota" class="stat-value">0 / 3 used</span>
+      </div>
+    </section>
+
+    <!-- Action Buttons -->
+    <section class="actions">
+      <button id="btn-toggle-panel" class="btn btn-primary">
+        <span>📂 Open Grabber Panel</span>
+      </button>
+
+      <a id="btn-upgrade" href="https://buy.stripe.com/test_placeholder_bulkgrab" target="_blank" class="btn btn-upgrade">
+        <span>⭐ Upgrade to Pro — $9.99</span>
+      </a>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span>BulkGrab v1.0.0</span>
+    </footer>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
