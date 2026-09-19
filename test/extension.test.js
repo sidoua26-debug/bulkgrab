@@ -473,6 +473,61 @@ async function runTests() {
       await page.close();
     });
 
+    // =========================================================================
+    // TEST 10: Regression — Floating grabber panel renders without RangeError stack overflow
+    // =========================================================================
+    await test('Grabber panel renders with chrome.runtime.getURL without RangeError stack overflow', async () => {
+      const page = await browser.newPage();
+      const pageErrors = [];
+      page.on('pageerror', err => pageErrors.push(err.message));
+
+      // Emulate isolated world runtime where chrome.runtime.getURL is available
+      await page.evaluateOnNewDocument((id) => {
+        window.chrome = window.chrome || {};
+        window.chrome.runtime = window.chrome.runtime || {};
+        window.chrome.runtime.getURL = (rel) => `chrome-extension://${id}/${rel}`;
+      }, extId);
+
+      await page.goto(`http://localhost:${TEST_PORT}/test-page.html`, { waitUntil: 'domcontentloaded' });
+      await page.addScriptTag({ path: path.join(__dirname, '../assets/vendor/jszip.min.js') });
+      await page.addScriptTag({ path: path.join(__dirname, '../content/content-script.js') });
+      await page.waitForFunction(() => window.__BULKGRAB_INITIALIZED__ === true, { timeout: 5000 });
+
+      // Check shadow root elements
+      const panelInfo = await page.evaluate(() => {
+        const root = document.getElementById('bulkgrab-root');
+        const shadow = root ? root.shadowRoot : null;
+        const panel = shadow ? shadow.querySelector('.bulkgrab-panel') : null;
+        const styleLink = shadow ? shadow.querySelector('link[rel="stylesheet"]') : null;
+        const logoImg = shadow ? shadow.querySelector('.logo-icon') : null;
+        return {
+          hasRoot: !!root,
+          hasPanel: !!panel,
+          styleHref: styleLink?.href,
+          logoSrc: logoImg?.src,
+          title: shadow?.querySelector('.panel-title')?.textContent,
+          itemCount: shadow?.querySelectorAll('.file-item')?.length
+        };
+      });
+
+      assert.strictEqual(pageErrors.length, 0, `Expected 0 page errors, got: ${pageErrors.join('; ')}`);
+      assert.strictEqual(panelInfo.hasRoot, true, 'bulkgrab-root must exist in DOM');
+      assert.strictEqual(panelInfo.hasPanel, true, 'Grabber panel must exist in shadow DOM');
+      assert.strictEqual(panelInfo.title, 'BulkGrab', 'Panel title should match');
+      assert.strictEqual(panelInfo.itemCount, 11, 'Panel must display 11 detected files');
+      assert(panelInfo.styleHref.includes(extId), 'Style link must point to extension URL via chrome.runtime.getURL');
+      assert(panelInfo.logoSrc.includes(extId), 'Logo img must point to extension URL via chrome.runtime.getURL');
+
+      // Test toggling panel visibility does not crash or loop
+      await page.evaluate(() => {
+        window.postMessage({ action: 'BULKGRAB_TEST_TOGGLE' }, '*');
+      });
+
+      assert.strictEqual(pageErrors.length, 0, 'No RangeError should occur after toggle');
+
+      await page.close();
+    });
+
   } finally {
     if (browser) await browser.close();
     if (server) server.close();

@@ -12,7 +12,7 @@
   window.__BULKGRAB_INITIALIZED__ = true;
   // Safe chrome.runtime helper (supports isolated world and test environments)
   const isExtensionContext = typeof chrome !== 'undefined' && Boolean(chrome?.runtime);
-  const getExtUrl = (relPath) => (isExtensionContext && chrome.runtime.getURL ? getExtUrl(relPath) : relPath);
+  const getExtUrl = (relPath) => (isExtensionContext && chrome.runtime.getURL ? chrome.runtime.getURL(relPath) : relPath);
 
   // Security Helper: Escape HTML special characters to prevent XSS / template injection
   function escapeHtml(str) {
