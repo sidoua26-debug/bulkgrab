@@ -60,39 +60,62 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Update Plan / Quota UI
-  if (isPro) {
-    tierBadge.textContent = 'PRO Active';
-    tierBadge.className = 'badge badge-pro';
-    
-    if (quotaSection) {
-      quotaSection.className = 'card quota-card pro-card';
-      quotaTitle.textContent = 'Pro Plan Unlocked';
-      downloadQuotaEl.textContent = '✨ Unlimited';
-      if (quotaTrackContainer) quotaTrackContainer.style.display = 'none';
-      if (quotaNote) quotaNote.textContent = 'Unlimited batch downloads and client-side ZIP export enabled.';
-    }
-    if (btnUpgrade) btnUpgrade.style.display = 'none';
-  } else {
-    tierBadge.textContent = 'Free Plan';
-    tierBadge.className = 'badge badge-free';
-    
-    const used = sessionDownloads;
-    downloadQuotaEl.textContent = `${used} / ${freeLimit} used`;
-    
-    const pct = Math.min(100, Math.round((used / freeLimit) * 100));
-    if (quotaFill) {
-      quotaFill.style.width = `${pct}%`;
-      if (used >= freeLimit) {
-        quotaFill.className = 'quota-fill full';
-        if (quotaNote) quotaNote.innerHTML = '<strong>Quota reached!</strong> Upgrade to Pro for unlimited downloads.';
-      } else if (used >= 2) {
-        quotaFill.className = 'quota-fill warn';
-        if (quotaNote) quotaNote.textContent = `${freeLimit - used} download remaining in this session.`;
-      } else {
-        quotaFill.className = 'quota-fill';
+  function updatePlanUI() {
+    if (isPro) {
+      tierBadge.textContent = 'PRO Active';
+      tierBadge.className = 'badge badge-pro';
+      
+      if (quotaSection) {
+        quotaSection.className = 'card quota-card pro-card';
+        quotaTitle.textContent = 'Pro Plan Unlocked';
+        downloadQuotaEl.textContent = '✨ Unlimited';
+        if (quotaTrackContainer) quotaTrackContainer.style.display = 'none';
+        if (quotaNote) quotaNote.textContent = 'Unlimited batch downloads and client-side ZIP export enabled.';
+      }
+      if (btnUpgrade) btnUpgrade.style.display = 'none';
+    } else {
+      tierBadge.textContent = 'Free Plan';
+      tierBadge.className = 'badge badge-free';
+      
+      const used = sessionDownloads;
+      downloadQuotaEl.textContent = `${used} / ${freeLimit} used`;
+      
+      const pct = Math.min(100, Math.round((used / freeLimit) * 100));
+      if (quotaFill) {
+        quotaFill.style.width = `${pct}%`;
+        if (used >= freeLimit) {
+          quotaFill.className = 'quota-fill full';
+          if (quotaNote) quotaNote.innerHTML = '<strong>Quota reached!</strong> Upgrade to Pro for unlimited downloads.';
+        } else if (used >= 2) {
+          quotaFill.className = 'quota-fill warn';
+          if (quotaNote) quotaNote.textContent = `${freeLimit - used} download remaining in this session.`;
+        } else {
+          quotaFill.className = 'quota-fill';
+        }
+      }
+      if (btnUpgrade) {
+        btnUpgrade.style.display = '';
+        btnUpgrade.href = STRIPE_PAYMENT_URL;
       }
     }
-    if (btnUpgrade) btnUpgrade.href = STRIPE_PAYMENT_URL;
+  }
+
+  updatePlanUI();
+
+  // Watch for storage changes in real-time
+  if (chrome.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      let changed = false;
+      if ((areaName === 'local' || !areaName) && changes.licenseStatus) {
+        isPro = changes.licenseStatus.newValue === 'pro';
+        changed = true;
+      }
+      if ((areaName === 'session' || !areaName) && changes.sessionDownloadCount) {
+        sessionDownloads = Number(changes.sessionDownloadCount.newValue) || 0;
+        changed = true;
+      }
+      if (changed) updatePlanUI();
+    });
   }
 
   // 2. Query and inspect active tab

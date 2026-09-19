@@ -358,12 +358,7 @@ async function runTests() {
       ];
 
       const proBatchAttempt = await extPage.evaluate(async (files) => {
-        // Mocking chrome.downloads.download inside evaluate so it doesn't fail on dummy URLs
-        const origDownload = chrome.downloads.download;
-        chrome.downloads.download = async () => 999;
-        const res = await chrome.runtime.sendMessage({ action: 'BULKGRAB_DOWNLOAD_FILES', files });
-        chrome.downloads.download = origDownload;
-        return res;
+        return await chrome.runtime.sendMessage({ action: 'BULKGRAB_DOWNLOAD_FILES', files });
       }, fourFiles);
 
       assert.strictEqual(proBatchAttempt.status, 'ok', 'Pro tier should allow batch downloading > 3 files');
@@ -524,6 +519,88 @@ async function runTests() {
       });
 
       assert.strictEqual(pageErrors.length, 0, 'No RangeError should occur after toggle');
+
+      await page.close();
+    });
+
+    // =========================================================================
+    // TEST 11: Active floating panel dynamically updates on chrome.storage.onChanged
+    // =========================================================================
+    await test('Active floating panel updates tier tag and unlocks ZIP on storage change without reload', async () => {
+      const page = await browser.newPage();
+
+      // Ensure storage starts at free
+      const sw = await swTarget.worker();
+      await sw.evaluate(async () => {
+        await chrome.storage.local.set({ licenseStatus: 'free' });
+      });
+
+      // Emulate isolated world runtime with chrome.storage.onChanged simulator
+      await page.evaluateOnNewDocument((id) => {
+        window.chrome = window.chrome || {};
+        window.chrome.runtime = window.chrome.runtime || {};
+        window.chrome.runtime.getURL = (rel) => `chrome-extension://${id}/${rel}`;
+        window.chrome.runtime.sendMessage = async (msg) => {
+          if (msg.action === 'BULKGRAB_GET_STATUS') {
+            return { status: 'ok', licenseStatus: 'free', sessionDownloads: 0, freeLimit: 3 };
+          }
+          return { status: 'ok' };
+        };
+
+        const listeners = [];
+        window.chrome.storage = {
+          onChanged: {
+            addListener: (fn) => listeners.push(fn)
+          }
+        };
+        window.__triggerStorageChange = (changes, area) => {
+          for (const fn of listeners) fn(changes, area);
+        };
+      }, extId);
+
+      await page.goto(`http://localhost:${TEST_PORT}/test-page.html`, { waitUntil: 'domcontentloaded' });
+      await page.addScriptTag({ path: path.join(__dirname, '../assets/vendor/jszip.min.js') });
+      await page.addScriptTag({ path: path.join(__dirname, '../content/content-script.js') });
+      await page.waitForFunction(() => window.__BULKGRAB_INITIALIZED__ === true, { timeout: 5000 });
+
+      // 1. Verify initial Free state
+      const initialUI = await page.evaluate(() => {
+        const root = document.getElementById('bulkgrab-root');
+        const shadow = root ? root.shadowRoot : null;
+        return {
+          tierTag: shadow?.querySelector('.tier-tag')?.textContent?.trim(),
+          zipBtn: shadow?.querySelector('#btn-zip')?.textContent?.trim(),
+          isZipLocked: shadow?.querySelector('#btn-zip')?.classList.contains('btn-zip-locked'),
+          quotaSummary: shadow?.querySelector('#quota-summary')?.textContent?.trim()
+        };
+      });
+
+      assert.strictEqual(initialUI.tierTag, 'FREE', 'Initial tier tag should be FREE');
+      assert.strictEqual(initialUI.zipBtn, '🔒 ZIP (PRO)', 'ZIP button should show locked status');
+      assert.strictEqual(initialUI.isZipLocked, true, 'ZIP button should have locked class');
+      assert(initialUI.quotaSummary.includes('Session Quota:'), 'Quota summary should show session limits');
+
+      // 2. Simulate Pro activation via chrome.storage.local change without any page reload or navigation
+      await page.evaluate(() => {
+        window.__triggerStorageChange({ licenseStatus: { oldValue: 'free', newValue: 'pro' } }, 'local');
+      });
+
+      // 3. Verify panel instantly transitioned to Pro in-place
+      const proUI = await page.evaluate(() => {
+        const root = document.getElementById('bulkgrab-root');
+        const shadow = root ? root.shadowRoot : null;
+        return {
+          tierTag: shadow?.querySelector('.tier-tag')?.textContent?.trim(),
+          zipBtn: shadow?.querySelector('#btn-zip')?.textContent?.trim(),
+          isZipLocked: shadow?.querySelector('#btn-zip')?.classList.contains('btn-zip-locked'),
+          quotaSummary: shadow?.querySelector('#quota-summary')?.textContent?.trim()
+        };
+      });
+
+      assert.strictEqual(proUI.tierTag, 'PRO', 'Tier tag should dynamically update to PRO');
+      assert.strictEqual(proUI.zipBtn, '📦 ZIP', 'ZIP button should unlock to 📦 ZIP');
+      assert.strictEqual(proUI.isZipLocked, false, 'ZIP button should no longer have locked class');
+      assert.strictEqual(proUI.quotaSummary, 'Unlimited Downloads', 'Quota summary should update to Unlimited Downloads');
 
       await page.close();
     });

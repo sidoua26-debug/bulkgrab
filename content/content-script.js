@@ -808,6 +808,31 @@
     });
   }
 
+  // Listen for storage changes (license status or session quota) across all open tabs
+  if (isExtensionContext && chrome.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      let stateChanged = false;
+
+      // Watch for licenseStatus changes in chrome.storage.local
+      if ((areaName === 'local' || !areaName) && changes.licenseStatus) {
+        licenseStatus = changes.licenseStatus.newValue || 'free';
+        stateChanged = true;
+        console.log(`[BulkGrab] Live license update received: ${licenseStatus}`);
+      }
+
+      // Watch for sessionDownloadCount changes in chrome.storage.session
+      if ((areaName === 'session' || !areaName) && changes.sessionDownloadCount) {
+        sessionDownloads = Number(changes.sessionDownloadCount.newValue) || 0;
+        stateChanged = true;
+      }
+
+      if (stateChanged && shadowRoot) {
+        renderUI();
+        updateStatusInUI();
+      }
+    });
+  }
+
   // Initialization
   async function init() {
     try {
