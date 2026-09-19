@@ -10,6 +10,9 @@
     return;
   }
   window.__BULKGRAB_INITIALIZED__ = true;
+  // Safe chrome.runtime helper (supports isolated world and test environments)
+  const isExtensionContext = typeof chrome !== 'undefined' && Boolean(chrome?.runtime);
+  const getExtUrl = (relPath) => (isExtensionContext && chrome.runtime.getURL ? getExtUrl(relPath) : relPath);
 
   // Security Helper: Escape HTML special characters to prevent XSS / template injection
   function escapeHtml(str) {
@@ -75,6 +78,7 @@
   // Fetch status from Service Worker
   async function refreshStatus() {
     try {
+      if (!isExtensionContext || !chrome.runtime.sendMessage) return;
       const res = await chrome.runtime.sendMessage({ action: 'BULKGRAB_GET_STATUS' });
       if (res && res.status === 'ok') {
         licenseStatus = res.licenseStatus || 'free';
@@ -170,7 +174,7 @@
     detectedFiles = Array.from(fileMap.values());
     console.log(`[BulkGrab] Scanned ${detectedFiles.length} downloadable files on this page.`);
     try {
-      chrome.runtime.sendMessage({ action: 'BULKGRAB_UPDATE_BADGE', count: detectedFiles.length });
+      if (isExtensionContext && chrome.runtime.sendMessage) chrome.runtime.sendMessage({ action: 'BULKGRAB_UPDATE_BADGE', count: detectedFiles.length });
     } catch (_) {}
     return detectedFiles;
   }
@@ -195,7 +199,7 @@
     // Link external CSS
     const styleLink = document.createElement('link');
     styleLink.rel = 'stylesheet';
-    styleLink.href = chrome.runtime.getURL('content/content-style.css');
+    styleLink.href = getExtUrl('content/content-style.css');
     shadowRoot.appendChild(styleLink);
 
     // Main markup container
@@ -221,7 +225,7 @@
     if (!isPanelVisible) {
       container.innerHTML = `
         <button id="btn-reopen-launcher" class="bulkgrab-launcher" title="Open BulkGrab Panel">
-          <img src="${chrome.runtime.getURL('assets/icons/icon-16.png')}" style="width:16px;height:16px;" alt="" />
+          <img src="${getExtUrl('assets/icons/icon-16.png')}" style="width:16px;height:16px;" alt="" />
           <span>BulkGrab (${detectedFiles.length})</span>
         </button>
       `;
@@ -250,7 +254,7 @@
         <!-- Header -->
         <div class="panel-header" id="panel-drag-handle">
           <div class="header-left">
-            <img src="${chrome.runtime.getURL('assets/icons/icon-16.png')}" class="logo-icon" alt="BulkGrab" />
+            <img src="${getExtUrl('assets/icons/icon-16.png')}" class="logo-icon" alt="BulkGrab" />
             <span class="panel-title">BulkGrab</span>
             <span class="tier-tag ${isPro ? 'tier-pro' : 'tier-free'}">${isPro ? 'PRO' : 'FREE'}</span>
           </div>
@@ -534,6 +538,10 @@
     setProgress(0, filesToDownload.length);
 
     try {
+      if (!isExtensionContext || !chrome.runtime.sendMessage) {
+        showStatus('Running in test environment (extension runtime not connected).', 'info');
+        return;
+      }
       const response = await chrome.runtime.sendMessage({
         action: 'BULKGRAB_DOWNLOAD_FILES',
         files: filesToDownload
@@ -606,7 +614,8 @@
   }
 
   // Listen for progress updates from Service Worker
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (isExtensionContext && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message || !message.action) return false;
 
         if (message.action === 'BULKGRAB_RESCAN') {
@@ -650,11 +659,14 @@
     }
 
     return false;
-  });
+    });
+  }
 
   // Initialization
   async function init() {
-    await refreshStatus();
+    try {
+      await refreshStatus();
+    } catch (_) {}
     scanDOMForFiles();
     createShadowUI();
   }
