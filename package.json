@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node test/extension.test.js"
+    "test": "node test/extension.test.js",
+    "render-icons": "node scripts/render-icons.js"
   },
   "keywords": [],
   "author": "",

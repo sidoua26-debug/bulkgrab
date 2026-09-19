@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient: Brand Indigo (#6366F1 to #4338CA to #3730A3) -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="50%" stop-color="#4F46E5"/>
+      <stop offset="100%" stop-color="#3730A3"/>
+    </linearGradient>
+
+    <!-- Top subtle lighting sheen for app-icon depth -->
+    <linearGradient id="topSheen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.02"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- App Icon Squircle Container -->
+  <rect x="32" y="32" width="448" height="448" rx="104" ry="104" fill="url(#bgGrad)"/>
+  <rect x="32" y="32" width="448" height="448" rx="104" ry="104" fill="url(#topSheen)"/>
+
+  <!-- Download Arrow: Bold geometric silhouette with rounded vertices -->
+  <path d="M 224 88
+           C 224 76 234 68 246 68
+           L 266 68
+           C 278 68 288 76 288 88
+           L 288 208
+           L 352 208
+           C 369 208 377 228 365 240
+           L 268 335
+           C 261 342 251 342 244 335
+           L 147 240
+           C 135 228 143 208 160 208
+           L 224 208
+           Z"
+        fill="#FFFFFF"/>
+
+  <!-- Download Tray: Sturdy cradle with rounded corners & stroke caps -->
+  <path d="M 128 340
+           L 128 388
+           C 128 410 146 428 168 428
+           L 344 428
+           C 366 428 384 410 384 388
+           L 384 340"
+        fill="none"
+        stroke="#FFFFFF"
+        stroke-width="48"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+</svg>
