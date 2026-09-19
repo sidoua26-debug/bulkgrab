@@ -644,10 +644,16 @@
           'warning'
         );
         // Seamless fallback to chrome.downloads API (which bypasses CORS)
-        await chrome.runtime.sendMessage({
+        const fallbackRes = await chrome.runtime.sendMessage({
           action: 'BULKGRAB_DOWNLOAD_FILES',
           files: filesToDownload
         });
+        if (fallbackRes && fallbackRes.status === 'quota_exceeded') {
+          showStatus(`❌ ${escapeHtml(fallbackRes.message)}`, 'error');
+        } else if (fallbackRes && fallbackRes.status === 'ok') {
+          sessionDownloads = fallbackRes.sessionDownloads || sessionDownloads;
+          updateStatusInUI();
+        }
         return;
       }
 
@@ -678,10 +684,16 @@
           );
 
           // Download CORS-blocked files individually via downloads API
-          await chrome.runtime.sendMessage({
+          const fallbackRes = await chrome.runtime.sendMessage({
             action: 'BULKGRAB_DOWNLOAD_FILES',
             files: failedFiles
           });
+          if (fallbackRes && fallbackRes.status === 'quota_exceeded') {
+            showStatus(`❌ ${escapeHtml(fallbackRes.message)}`, 'error');
+          } else if (fallbackRes && fallbackRes.status === 'ok') {
+            sessionDownloads = fallbackRes.sessionDownloads || sessionDownloads;
+            updateStatusInUI();
+          }
         } else {
           showStatus(`✅ ZIP archive (${packagedFiles.length} files) saved as ${escapeHtml(zipFilename)}!`, 'info');
           setTimeout(hideStatus, 6000);

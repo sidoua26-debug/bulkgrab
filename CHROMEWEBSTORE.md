@@ -54,6 +54,8 @@ Chrome Web Store requires a plain-English explanation for every requested permis
   - [ ] 1280x800 or 640x400 screenshot of in-page floating grabber panel.
   - [ ] Screenshot of Popup UI showing detected file stats.
   - [ ] Screenshot of options/licensing interface.
-- [ ] **Privacy Policy**:
-  - BulkGrab does not transmit user data, webpage contents, or browsing history to external servers. All operations occur client-side.
+- [ ] **Privacy Policy & Single Purpose**:
+  - **Single Purpose**: BulkGrab provides in-page detection and streamlined downloading of downloadable files and media.
+  - **Data Transmission**: BulkGrab does not collect, track, or transmit user data, browsing history, or webpage contents to external servers. All file scanning, selection, and archive bundling execute entirely locally on the user's device.
+  - **Licensing Verification**: When a user activates a Pro tier license, only the user-submitted Stripe checkout session ID is sent to the verification backend to validate purchase status. No personal data or browsing details are transmitted.
 
