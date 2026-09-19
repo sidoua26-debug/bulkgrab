@@ -54,7 +54,7 @@ export const FREE_DOWNLOAD_LIMIT = 7;
 export const STORAGE_KEYS = {
   LICENSE_STATUS: 'licenseStatus',           // 'free' | 'pro'
   SESSION_DOWNLOADS: 'sessionDownloadCount', // integer (stored in chrome.storage.session)
-  STRIPE_SESSION_ID: 'stripeSessionId',      // string
+  COINBASE_CHARGE_ID: 'coinbaseChargeId'     // string (Coinbase Commerce charge ID / code)
 };
 
 // Message actions for runtime communication between components
@@ -78,5 +78,6 @@ export const MESSAGE_ACTIONS = {
   CREATE_ZIP: 'BULKGRAB_CREATE_ZIP'
 };
 
-// Stripe checkout / payment link placeholder
-export const STRIPE_PAYMENT_URL = 'https://buy.stripe.com/test_placeholder_bulkgrab';
+// Payment link placeholder for Pro tier upgrade
+export const COINBASE_CHECKOUT_URL = 'https://commerce.coinbase.com/checkout/test_placeholder_bulkgrab';
+

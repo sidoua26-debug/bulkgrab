@@ -14,7 +14,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   if (!existing[STORAGE_KEYS.LICENSE_STATUS]) {
     await chrome.storage.local.set({
       [STORAGE_KEYS.LICENSE_STATUS]: 'free',
-      [STORAGE_KEYS.STRIPE_SESSION_ID]: ''
+      [STORAGE_KEYS.COINBASE_CHARGE_ID]: ''
     });
     console.log('[BulkGrab Service Worker] Initialized default license status: free');
   }
@@ -40,60 +40,122 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 
 /**
- * STUB: Verify Stripe Checkout Session ID.
- * Currently accepts any non-empty string and activates 'pro' status.
- * 
  * =========================================================================
- * HOW TO CONNECT TO A REAL CLOUDFLARE WORKER:
+ * COINBASE COMMERCE LICENSE VERIFICATION STUB
  * =========================================================================
- * Replace the mock storage update below with a live fetch to your Cloudflare Worker:
  * 
- * try {
- *   const response = await fetch(`https://your-worker.workers.dev/api/verify-license?session_id=${encodeURIComponent(sessionId)}`, {
- *     method: 'GET',
- *     headers: { 'Accept': 'application/json' }
- *   });
- *   if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`);
- *   const data = await response.json();
- *   if (!data.valid) {
- *     return { valid: false, error: data.message || 'Invalid or unverified Stripe session ID.' };
+ * REAL CLOUDFLARE WORKER REFERENCE IMPLEMENTATION:
+ * 
+ * To protect your Coinbase Commerce API key, requests must be routed through
+ * your Cloudflare Worker backend rather than directly in the client extension:
+ * 
+ * export default {
+ *   async fetch(request, env) {
+ *     const url = new URL(request.url);
+ *     if (url.pathname === '/api/verify-coinbase') {
+ *       const chargeId = url.searchParams.get('charge_id');
+ *       if (!chargeId) {
+ *         return new Response(JSON.stringify({ valid: false, error: 'Missing charge_id' }), {
+ *           status: 400,
+ *           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+ *         });
+ *       }
+ * 
+ *       try {
+ *         // 1. Fetch charge from Coinbase Commerce API
+ *         const response = await fetch(`https://api.commerce.coinbase.com/charges/${encodeURIComponent(chargeId)}`, {
+ *           method: 'GET',
+ *           headers: {
+ *             'X-CC-Api-Key': env.COINBASE_COMMERCE_API_KEY,
+ *             'X-CC-Version': '2018-03-22',
+ *             'Accept': 'application/json'
+ *           }
+ *         });
+ * 
+ *         if (!response.ok) {
+ *           return new Response(JSON.stringify({ valid: false, error: `Coinbase API returned HTTP ${response.status}` }), {
+ *             status: response.status,
+ *             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+ *           });
+ *         }
+ * 
+ *         const json = await response.json();
+ *         const charge = json.data;
+ * 
+ *         // 2. Check the charge timeline for COMPLETED status (not PENDING or EXPIRED)
+ *         const timeline = charge.timeline || [];
+ *         const isCompleted = timeline.some(entry => entry.status === 'COMPLETED') || charge.status === 'COMPLETED';
+ *         const isPending = timeline.some(entry => entry.status === 'PENDING') || charge.status === 'PENDING';
+ * 
+ *         if (!isCompleted) {
+ *           if (isPending) {
+ *             return new Response(JSON.stringify({
+ *               valid: false,
+ *               pending: true,
+ *               error: 'Crypto payment detected on blockchain but awaiting confirmation. Please try again in 2-5 minutes.'
+ *             }), {
+ *               headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+ *             });
+ *           }
+ *           const latestStatus = timeline[timeline.length - 1]?.status || charge.status || 'NEW';
+ *           return new Response(JSON.stringify({
+ *             valid: false,
+ *             error: `Payment is not completed. Current status: ${latestStatus}`
+ *           }), {
+ *             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+ *           });
+ *         }
+ * 
+ *         // 3. Only then grant Pro tier
+ *         return new Response(JSON.stringify({
+ *           valid: true,
+ *           status: 'pro',
+ *           chargeId: charge.id,
+ *           chargeCode: charge.code,
+ *           customerEmail: charge.metadata?.customer_email
+ *         }), {
+ *           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+ *         });
+ *       } catch (err) {
+ *         return new Response(JSON.stringify({ valid: false, error: err.message }), {
+ *           status: 500,
+ *           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+ *         });
+ *       }
+ *     }
+ *     return new Response('Not Found', { status: 404 });
  *   }
- *   await chrome.storage.local.set({
- *     [STORAGE_KEYS.LICENSE_STATUS]: 'pro',
- *     [STORAGE_KEYS.STRIPE_SESSION_ID]: sessionId.trim()
- *   });
- *   return { valid: true, status: 'pro', sessionId: sessionId.trim(), message: 'Pro license verified!' };
- * } catch (err) {
- *   return { valid: false, error: `Verification failed: ${err.message}` };
- * }
- * =========================================================================
+ * };
  */
-export async function verifyLicense(sessionId) {
-  if (!sessionId || typeof sessionId !== 'string' || !sessionId.trim()) {
+
+/**
+ * Verify Coinbase Commerce charge ID / code.
+ * Stub behavior: accepts any non-empty string as valid.
+ */
+export async function verifyLicense(chargeId) {
+  if (!chargeId || typeof chargeId !== 'string' || !chargeId.trim()) {
     return {
       valid: false,
-      error: 'Please enter a valid Stripe Checkout session ID (e.g. cs_test_...).'
+      error: 'Please enter a valid Coinbase Commerce charge ID.'
     };
   }
 
-  const trimmed = sessionId.trim();
+  const trimmed = chargeId.trim();
 
-  // Stub behavior: accept any non-empty session ID string
+  // Stub logic: accepts any non-empty string as valid
   await chrome.storage.local.set({
     [STORAGE_KEYS.LICENSE_STATUS]: 'pro',
-    [STORAGE_KEYS.STRIPE_SESSION_ID]: trimmed
+    [STORAGE_KEYS.COINBASE_CHARGE_ID]: trimmed
   });
 
-  console.log(`[BulkGrab Service Worker] Stub license verified. Pro tier activated for session: ${trimmed}`);
-
-  // Broadcast to all active tabs to update in-page UI immediately
+  console.log(`[BulkGrab Service Worker] Coinbase Commerce license stub verified: ${trimmed}`);
   broadcastLicenseChange('pro');
 
   return {
     valid: true,
     status: 'pro',
-    sessionId: trimmed,
-    message: 'Pro license activated successfully! Unlimited downloads and ZIP bundling unlocked.'
+    chargeId: trimmed,
+    message: 'Coinbase Commerce crypto payment confirmed! Pro tier activated.'
   };
 }
 
@@ -103,7 +165,7 @@ export async function verifyLicense(sessionId) {
 export async function resetLicense() {
   await chrome.storage.local.set({
     [STORAGE_KEYS.LICENSE_STATUS]: 'free',
-    [STORAGE_KEYS.STRIPE_SESSION_ID]: ''
+    [STORAGE_KEYS.COINBASE_CHARGE_ID]: ''
   });
   console.log('[BulkGrab Service Worker] License status reset to free.');
 
@@ -442,7 +504,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === MESSAGE_ACTIONS.GET_STATUS) {
     (async () => {
       try {
-        const local = await chrome.storage.local.get([STORAGE_KEYS.LICENSE_STATUS, STORAGE_KEYS.STRIPE_SESSION_ID]);
+        const local = await chrome.storage.local.get([
+          STORAGE_KEYS.LICENSE_STATUS,
+          STORAGE_KEYS.COINBASE_CHARGE_ID
+        ]);
         let sessionCount = 0;
         if (chrome.storage.session) {
           const session = await chrome.storage.session.get(STORAGE_KEYS.SESSION_DOWNLOADS);
@@ -451,7 +516,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({
           status: 'ok',
           licenseStatus: local[STORAGE_KEYS.LICENSE_STATUS] || 'free',
-          stripeSessionId: local[STORAGE_KEYS.STRIPE_SESSION_ID] || '',
+          coinbaseChargeId: local[STORAGE_KEYS.COINBASE_CHARGE_ID] || '',
+          chargeId: local[STORAGE_KEYS.COINBASE_CHARGE_ID] || '',
           sessionDownloads: sessionCount,
           freeLimit: FREE_DOWNLOAD_LIMIT
         });
@@ -465,7 +531,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // 2. Verify license stub
   if (message.action === MESSAGE_ACTIONS.VERIFY_LICENSE) {
     (async () => {
-      const result = await verifyLicense(message.sessionId);
+      const chargeId = message.chargeId || message.sessionId;
+      const result = await verifyLicense(chargeId);
       sendResponse(result);
     })();
     return true;

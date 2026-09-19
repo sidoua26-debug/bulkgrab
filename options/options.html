@@ -32,17 +32,17 @@
       </p>
 
       <div class="session-info" id="session-info-box" style="display: none;">
-        <span class="label">Active Stripe Session ID:</span>
+        <span class="label" id="session-info-label">Active Coinbase Charge ID:</span>
         <code id="active-session-id" class="session-code">None</code>
       </div>
 
       <div class="input-group">
-        <label for="session-id-input">Stripe Checkout Session ID:</label>
+        <label for="charge-id-input">Coinbase Commerce Charge ID:</label>
         <div class="input-row">
           <input 
             type="text" 
-            id="session-id-input" 
-            placeholder="cs_test_a1b2c3d4e5f6..." 
+            id="charge-id-input" 
+            placeholder="e.g. 83647472-a1b2-4c3d-8e5f-123456789abc or W6D7GXYZ" 
             autocomplete="off"
             spellcheck="false"
           />
@@ -50,6 +50,10 @@
             <span>Activate Pro</span>
           </button>
         </div>
+        <p class="input-helper" style="font-size: 11px; color: #64748b; margin-top: 6px; line-height: 1.4;">
+          Find your Charge ID or 8-character code on your Coinbase Commerce payment confirmation screen or receipt. 
+          <em>Note: Cryptocurrency payments may take 2–5 minutes to confirm on the blockchain before verification succeeds. If not confirmed yet, please wait a few minutes and try again.</em>
+        </p>
       </div>
 
       <!-- Action status feedback message -->
@@ -88,16 +92,16 @@
       <h2>How Freemium Licensing Works</h2>
       <ol class="steps-list">
         <li>
-          <strong>Step 1: Stripe Checkout</strong><br>
-          In the extension popup, click <em>"Upgrade to Pro — $9.99"</em>. This opens the secure Stripe payment link.
+          <strong>Step 1: Coinbase Commerce Crypto Checkout</strong><br>
+          In the extension popup, click <em>"🪙 Pay with Crypto — $9.99"</em>. This opens the secure Coinbase Commerce payment checkout.
         </li>
         <li>
-          <strong>Step 2: Retrieve Session ID</strong><br>
-          After completing payment, Stripe redirects to your success page with <code>?session_id=cs_...</code> in the URL query string.
+          <strong>Step 2: Retrieve Charge ID</strong><br>
+          After completing payment, copy your Charge ID or 8-character charge code from your confirmation screen or email receipt.
         </li>
         <li>
           <strong>Step 3: Activate</strong><br>
-          Paste that session ID into the field above to activate Pro tier instantly across your browser.
+          Paste your Charge ID into the field above to activate Pro tier. <em>(Note: Blockchain confirmations typically take 2–5 minutes).</em>
         </li>
       </ol>
     </div>
@@ -106,15 +110,15 @@
     <div class="card">
       <h2>Connecting a Real Cloudflare Worker Endpoint</h2>
       <p class="card-desc">
-        The extension currently uses a swappable stub function <code>verifyLicense(sessionId)</code> in <code>background/service-worker.js</code> that accepts any non-empty string.
+        The extension currently uses a swappable stub function <code>verifyLicense(chargeId)</code> in <code>background/service-worker.js</code> that accepts any non-empty string.
       </p>
       <div class="code-block">
         <div class="code-header">Cloudflare Worker Integration (service-worker.js)</div>
-        <pre><code>// In background/service-worker.js -> verifyLicense(sessionId):
-const res = await fetch(`https://your-worker.workers.dev/verify-license?session_id=${encodeURIComponent(sessionId)}`);
+        <pre><code>// In background/service-worker.js -> verifyLicense(chargeId):
+const res = await fetch(`https://your-worker.workers.dev/api/verify-coinbase?charge_id=${encodeURIComponent(chargeId)}`);
 const data = await res.json();
 if (data.valid) {
-  await chrome.storage.local.set({ licenseStatus: 'pro', stripeSessionId: sessionId });
+  await chrome.storage.local.set({ licenseStatus: 'pro', coinbaseChargeId: chargeId });
 }</code></pre>
       </div>
     </div>

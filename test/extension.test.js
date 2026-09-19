@@ -222,7 +222,7 @@ async function runTests() {
       assert.strictEqual(popupStats.archivesPill, '📦 1 Archives');
       assert.strictEqual(popupStats.mediaPill, '🎵 2 Media');
       assert(popupStats.quotaText.includes('/ 7'), 'Quota text should display / 7 format');
-      assert(popupStats.upgradeHref.includes('buy.stripe.com'), 'Upgrade button should point to Stripe checkout');
+      assert(popupStats.upgradeHref.includes('commerce.coinbase.com'), 'Upgrade button should point to Coinbase Commerce checkout');
 
       await popupPage.close();
     });
@@ -312,9 +312,9 @@ async function runTests() {
     });
 
     // =========================================================================
-    // TEST 6: Options page verifies Stripe session ID via stub and activates Pro
+    // TEST 6: Options page verifies Coinbase Commerce charge ID via stub and activates Pro
     // =========================================================================
-    await test('Options page verifies Stripe session ID via stub and activates Pro status', async () => {
+    await test('Options page verifies Coinbase Commerce charge ID via stub and activates Pro status', async () => {
       const optionsPage = await browser.newPage();
       await optionsPage.goto(`chrome-extension://${extId}/options/options.html`, { waitUntil: 'domcontentloaded' });
 
@@ -322,8 +322,8 @@ async function runTests() {
       const initialBadge = await optionsPage.$eval('#tier-badge', el => el.textContent.trim());
       assert.strictEqual(initialBadge, 'Free Plan');
 
-      // Enter a test Stripe checkout session ID
-      await optionsPage.type('#session-id-input', 'cs_test_sample_session_123456');
+      // Enter a test Coinbase Commerce charge ID
+      await optionsPage.type('#charge-id-input', 'cb_charge_test_sample_123456');
       await optionsPage.click('#btn-activate');
 
       // Wait for UI to update
@@ -334,11 +334,11 @@ async function runTests() {
       // Verify Pro status is reflected in chrome.storage.local
       const sw = await swTarget.worker();
       const storageData = await sw.evaluate(async () => {
-        return await chrome.storage.local.get(['licenseStatus', 'stripeSessionId']);
+        return await chrome.storage.local.get(['licenseStatus', 'coinbaseChargeId']);
       });
 
       assert.strictEqual(storageData.licenseStatus, 'pro', 'Storage licenseStatus should be "pro"');
-      assert.strictEqual(storageData.stripeSessionId, 'cs_test_sample_session_123456', 'Stored session ID must match');
+      assert.strictEqual(storageData.coinbaseChargeId, 'cb_charge_test_sample_123456', 'Stored charge ID must match');
 
       await optionsPage.close();
     });
@@ -406,11 +406,11 @@ async function runTests() {
 
       const sw = await swTarget.worker();
       const storageData = await sw.evaluate(async () => {
-        return await chrome.storage.local.get(['licenseStatus', 'stripeSessionId']);
+        return await chrome.storage.local.get(['licenseStatus', 'coinbaseChargeId']);
       });
 
       assert.strictEqual(storageData.licenseStatus, 'free', 'License should be reset to "free"');
-      assert.strictEqual(storageData.stripeSessionId, '', 'Stripe session ID should be cleared');
+      assert.strictEqual(storageData.coinbaseChargeId, '', 'Coinbase charge ID should be cleared');
 
       await optionsPage.close();
     });
@@ -778,6 +778,74 @@ async function runTests() {
       assert.strictEqual(zipResult.zipFilename, 'Test_Archive.zip', 'Archive filename should match');
 
       await extPage.close();
+    });
+
+    // =========================================================================
+    // TEST 15: verifyLicense rejects empty or invalid charge ID and confirms Pro activation
+    // =========================================================================
+    await test('verifyLicense rejects empty or invalid charge ID and confirms Pro activation with valid charge ID', async () => {
+      const sw = await swTarget.worker();
+      const optionsPage = await browser.newPage();
+      await optionsPage.goto(`chrome-extension://${extId}/options/options.html`, { waitUntil: 'domcontentloaded' });
+
+      // 1. Direct message verification test with empty string
+      const emptyResult = await optionsPage.evaluate(async () => {
+        return await chrome.runtime.sendMessage({
+          action: 'BULKGRAB_VERIFY_LICENSE',
+          chargeId: ''
+        });
+      });
+      assert.strictEqual(emptyResult.valid, false, 'Empty charge ID must return valid: false');
+      assert(emptyResult.error.includes('valid Coinbase Commerce charge ID'), 'Should return helpful error message');
+
+      // 2. Direct message verification test with whitespace-only string
+      const wsResult = await optionsPage.evaluate(async () => {
+        return await chrome.runtime.sendMessage({
+          action: 'BULKGRAB_VERIFY_LICENSE',
+          chargeId: '   \t\n  '
+        });
+      });
+      assert.strictEqual(wsResult.valid, false, 'Whitespace charge ID must return valid: false');
+
+      // 3. UI test via Options page
+      // Reset to free first
+      await optionsPage.click('#btn-reset');
+      await optionsPage.waitForFunction(() => {
+        return document.getElementById('tier-badge')?.textContent.includes('Free Plan');
+      });
+
+      // Attempt to activate with empty input
+      await optionsPage.click('#btn-activate');
+      const errorMsg = await optionsPage.$eval('#status-message', el => el.textContent);
+      assert(errorMsg.includes('Coinbase Commerce Charge ID'), 'Error message should guide user to enter Coinbase charge ID');
+
+      // Verify license remains free in storage
+      const storageData = await sw.evaluate(async () => {
+        return await chrome.storage.local.get(['licenseStatus', 'coinbaseChargeId']);
+      });
+      assert.strictEqual(storageData.licenseStatus, 'free', 'License must remain free after empty input rejection');
+      assert.strictEqual(storageData.coinbaseChargeId, '', 'Charge ID must remain empty');
+
+      // 4. Valid charge ID activation succeeds via message
+      const validResult = await optionsPage.evaluate(async () => {
+        return await chrome.runtime.sendMessage({
+          action: 'BULKGRAB_VERIFY_LICENSE',
+          chargeId: 'W6D7GXYZ'
+        });
+      });
+      assert.strictEqual(validResult.valid, true, 'Valid charge code must return valid: true');
+      assert.strictEqual(validResult.status, 'pro', 'Valid charge code must set status: pro');
+      assert.strictEqual(validResult.chargeId, 'W6D7GXYZ', 'Returned chargeId must match');
+
+      const storageAfterValid = await sw.evaluate(async () => {
+        return await chrome.storage.local.get(['licenseStatus', 'coinbaseChargeId']);
+      });
+      assert.strictEqual(storageAfterValid.licenseStatus, 'pro', 'License should be pro after valid charge ID');
+      assert.strictEqual(storageAfterValid.coinbaseChargeId, 'W6D7GXYZ', 'Stored chargeId should match');
+
+      // Reset back to free
+      await optionsPage.click('#btn-reset');
+      await optionsPage.close();
     });
 
   } finally {

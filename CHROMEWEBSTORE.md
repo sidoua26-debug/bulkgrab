@@ -57,7 +57,7 @@ Chrome Web Store requires a plain-English explanation for every requested permis
   - [x] Placeholder icons generated (16x16, 48x48, 128x128)
   - [ ] **Action required before final submission**: Replace with polished final brand icons.
 - [ ] **Licensing Backend (CRITICAL)**:
-  - [ ] **Action required before final submission**: The current build contains a local development stub (`verifyLicense` in `background/service-worker.js`) that validates test session IDs starting with `cs_test_`. For production Web Store release, deploy the provided Cloudflare Worker (see `README.md`) to verify Stripe checkout sessions against the Stripe API, and update the endpoint URL in `background/service-worker.js`.
+  - [ ] **Action required before final submission**: The current build contains a local development stub (`verifyLicense` in `background/service-worker.js`) that validates charge IDs. For production Web Store release, deploy the provided Cloudflare Worker (see `README.md`) to verify Coinbase Commerce charges against the Coinbase Commerce API, and update the endpoint URL in `background/service-worker.js`.
 - [ ] **Store Promotional Screenshots**:
   - [ ] 1280x800 or 640x400 screenshot of in-page floating grabber panel.
   - [ ] Screenshot of Popup UI showing detected file stats.
@@ -65,5 +65,5 @@ Chrome Web Store requires a plain-English explanation for every requested permis
 - [ ] **Privacy Policy & Single Purpose**:
   - **Single Purpose**: BulkGrab provides in-page detection and streamlined downloading of downloadable files and media.
   - **Data Transmission**: BulkGrab does not collect, track, or transmit user data, browsing history, or webpage contents to external servers. All file scanning, selection, and archive bundling execute entirely locally on the user's device.
-  - **Licensing Verification**: When a user activates a Pro tier license, only the user-submitted Stripe checkout session ID is sent to the verification backend to validate purchase status. No personal data or browsing details are transmitted.
+  - **Licensing Verification**: When a user activates a Pro tier license, only the user-submitted Coinbase Commerce Charge ID is sent to the verification backend to validate purchase status on the blockchain. No personal data or browsing details are transmitted.
 
