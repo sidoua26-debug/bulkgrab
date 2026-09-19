@@ -350,20 +350,23 @@ async function runTests() {
       const extPage = await browser.newPage();
       await extPage.goto(`chrome-extension://${extId}/options/options.html`, { waitUntil: 'domcontentloaded' });
 
-      // 1. Verify batch downloading 4 files is allowed on Pro tier
-      const fourFiles = [
-        { url: 'https://example.com/file1.pdf', filename: 'file1.pdf' },
-        { url: 'https://example.com/file2.pdf', filename: 'file2.pdf' },
-        { url: 'https://example.com/file3.pdf', filename: 'file3.pdf' },
-        { url: 'https://example.com/file4.pdf', filename: 'file4.pdf' }
-      ];
+      const sw = await swTarget.worker();
+      await sw.evaluate(() => {
+        chrome.downloads.download = async () => 999;
+      });
+
+      // 1. Verify batch downloading 8 files (> 7 Free limit) is allowed on Pro tier
+      const eightFiles = Array.from({ length: 8 }, (_, i) => ({
+        url: `https://example.com/file${i + 1}.pdf`,
+        filename: `file${i + 1}.pdf`
+      }));
 
       const proBatchAttempt = await extPage.evaluate(async (files) => {
         return await chrome.runtime.sendMessage({ action: 'BULKGRAB_DOWNLOAD_FILES', files });
-      }, fourFiles);
+      }, eightFiles);
 
-      assert.strictEqual(proBatchAttempt.status, 'ok', 'Pro tier should allow batch downloading > 3 files');
-      assert.strictEqual(proBatchAttempt.totalFiles, 4, 'Total files should be 4');
+      assert.strictEqual(proBatchAttempt.status, 'ok', 'Pro tier should allow batch downloading > 7 files');
+      assert.strictEqual(proBatchAttempt.totalFiles, 8, 'Total files should be 8');
 
       // 2. Verify ZIP archive packaging with JSZip
       const zipTest = await extPage.evaluate(async () => {
