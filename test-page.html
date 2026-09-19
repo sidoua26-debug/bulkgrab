@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BulkGrab Test Page — Sample Downloadable Files</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 20px;
+      line-height: 1.6;
+      color: #333;
+      background: #f8fafc;
+    }
+    h1 {
+      color: #1e293b;
+      margin-bottom: 8px;
+    }
+    .intro {
+      color: #64748b;
+      margin-bottom: 32px;
+    }
+    .card {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+    }
+    .card h2 {
+      margin-top: 0;
+      color: #334155;
+      font-size: 18px;
+      border-bottom: 2px solid #f1f5f9;
+      padding-bottom: 8px;
+    }
+    .link-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .link-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: #f8fafc;
+      border-radius: 6px;
+      border: 1px solid #edf2f7;
+    }
+    .badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .badge-pdf { background: #fee2e2; color: #b91c1c; }
+    .badge-img { background: #e0f2fe; color: #0369a1; }
+    .badge-doc { background: #fef3c7; color: #b45309; }
+    .badge-zip { background: #ede9fe; color: #6d28d9; }
+    .badge-media { background: #dcfce7; color: #15803d; }
+    a {
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .sample-img {
+      width: 80px;
+      height: 60px;
+      object-fit: cover;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>BulkGrab Verification Test Page</h1>
+  <p class="intro">This page contains sample downloadable links and media tags with various file extensions to test BulkGrab DOM scanning, selection, and download limits.</p>
+
+  <div class="card">
+    <h2>📄 Documents (PDF, DOCX, XLSX, TXT)</h2>
+    <div class="link-list">
+      <div class="link-item">
+        <span class="badge badge-pdf">PDF</span>
+        <a href="https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf" download="sample_document.pdf">sample_document.pdf</a>
+        <span>(Direct download link)</span>
+      </div>
+      <div class="link-item">
+        <span class="badge badge-pdf">PDF</span>
+        <a href="https://raw.githubusercontent.com/mozilla/pdf.js/master/examples/learning/helloworld.pdf">quarterly_report_2026.pdf</a>
+        <span>(Standard anchor link)</span>
+      </div>
+      <div class="link-item">
+        <span class="badge badge-doc">DOCX</span>
+        <a href="https://calibre-ebook.com/downloads/demos/demo.docx">project_specifications.docx</a>
+      </div>
+      <div class="link-item">
+        <span class="badge badge-doc">TXT</span>
+        <a href="https://www.rfc-editor.org/rfc/rfc2616.txt">rfc2616_http_spec.txt</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🖼️ Images (PNG, JPG, SVG)</h2>
+    <div class="link-list">
+      <div class="link-item">
+        <span class="badge badge-img">PNG</span>
+        <img src="https://picsum.photos/id/237/200/200.jpg" alt="Sample Dog Image" class="sample-img">
+        <a href="https://picsum.photos/id/237/800/800.jpg" download="nature_highres.jpg">nature_highres.jpg</a>
+      </div>
+      <div class="link-item">
+        <span class="badge badge-img">PNG</span>
+        <a href="https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png">transparency_demo.png</a>
+      </div>
+      <div class="link-item">
+        <span class="badge badge-img">SVG</span>
+        <a href="https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/tiger.svg">vector_tiger.svg</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📦 Archives & Media (ZIP, MP3, MP4)</h2>
+    <div class="link-list">
+      <div class="link-item">
+        <span class="badge badge-zip">ZIP</span>
+        <a href="https://raw.githubusercontent.com/Stuk/jszip/master/test/ref/text.zip">sample_archive.zip</a>
+      </div>
+      <div class="link-item">
+        <span class="badge badge-media">MP3</span>
+        <a href="https://actions.google.com/sounds/v1/alarms/beep_short.ogg">notification_sound.mp3</a>
+      </div>
+      <div class="link-item">
+        <span class="badge badge-media">MP4</span>
+        <a href="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4">video_clip_promo.mp4</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

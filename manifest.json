@@ -51,6 +51,7 @@
     {
       "resources": [
         "content/content-style.css",
+        "utils/constants.js",
         "assets/icons/*"
       ],
       "matches": ["http://*/*", "https://*/*"]
