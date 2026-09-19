@@ -3,6 +3,7 @@
  * Manages chrome.downloads, license status, licensing verification stub, and session download quotas.
  */
 
+import '../assets/vendor/jszip.min.js';
 import { STORAGE_KEYS, MESSAGE_ACTIONS, FREE_DOWNLOAD_LIMIT } from '../utils/constants.js';
 
 // Initialize default state on extension install or update
@@ -331,6 +332,106 @@ async function handleDownloadZip(dataUrl, filename = 'BulkGrab_Archive.zip') {
   }
 }
 
+let pendingPermissionResolver = null;
+let permissionWindowId = null;
+
+// Track window closing for permission prompt
+if (typeof chrome !== 'undefined' && chrome.windows && chrome.windows.onRemoved) {
+  chrome.windows.onRemoved.addListener((closedWindowId) => {
+    if (closedWindowId === permissionWindowId) {
+      if (pendingPermissionResolver) {
+        pendingPermissionResolver({ granted: false });
+        pendingPermissionResolver = null;
+      }
+      permissionWindowId = null;
+    }
+  });
+}
+
+/**
+ * Package files in the background using JSZip with elevated host permissions (bypassing CORS).
+ */
+async function handleCreateZip(files, zipFilename = 'BulkGrab_Archive.zip', senderTabId = null) {
+  const localData = await chrome.storage.local.get(STORAGE_KEYS.LICENSE_STATUS);
+  const isPro = localData[STORAGE_KEYS.LICENSE_STATUS] === 'pro';
+  if (!isPro) {
+    return {
+      status: 'pro_required',
+      message: 'Download as ZIP is a Pro feature. Upgrade to Pro to unlock ZIP bundling.'
+    };
+  }
+
+  if (!files || !files.length) {
+    return { status: 'error', message: 'No files provided for ZIP creation.' };
+  }
+
+  const JSZipLib = self.JSZip;
+  if (!JSZipLib) {
+    return { status: 'error', message: 'JSZip library not available in service worker.' };
+  }
+
+  const zip = new JSZipLib();
+  const packagedFiles = [];
+  const failedFiles = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const currentIndex = i + 1;
+
+    if (senderTabId) {
+      try {
+        await chrome.tabs.sendMessage(senderTabId, {
+          action: MESSAGE_ACTIONS.DOWNLOAD_PROGRESS,
+          index: currentIndex,
+          total: files.length,
+          filename: file.filename,
+          state: 'zipping'
+        });
+      } catch (_) {}
+    }
+
+    try {
+      const res = await fetch(file.url, { credentials: 'include' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buffer = await res.arrayBuffer();
+      zip.file(file.filename || `file_${currentIndex}`, buffer);
+      packagedFiles.push(file);
+    } catch (fetchErr) {
+      console.warn(`[BulkGrab Service Worker] Failed to fetch ${file.url} for ZIP:`, fetchErr);
+      failedFiles.push({ ...file, error: fetchErr.message });
+    }
+  }
+
+  if (packagedFiles.length === 0) {
+    return {
+      status: 'all_failed',
+      packagedCount: 0,
+      failedCount: failedFiles.length,
+      failedFiles,
+      message: 'None of the selected files could be fetched for the ZIP archive.'
+    };
+  }
+
+  const base64Data = await zip.generateAsync({ type: 'base64' });
+  const dataUrl = 'data:application/zip;base64,' + base64Data;
+
+  const downloadId = await chrome.downloads.download({
+    url: dataUrl,
+    filename: zipFilename,
+    conflictAction: 'uniquify',
+    saveAs: false
+  });
+
+  return {
+    status: 'ok',
+    downloadId,
+    zipFilename,
+    packagedCount: packagedFiles.length,
+    failedCount: failedFiles.length,
+    failedFiles
+  };
+}
+
 // Runtime message dispatcher
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !message.action) return false;
@@ -426,6 +527,84 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     sendResponse({ status: 'ok' });
     return false;
+  }
+
+  // 8. Check optional permissions
+  if (message.action === MESSAGE_ACTIONS.CHECK_PERMISSIONS) {
+    (async () => {
+      try {
+        const hasPermission = await chrome.permissions.contains({ origins: ['<all_urls>'] });
+        sendResponse({ status: 'ok', hasPermission: Boolean(hasPermission) });
+      } catch (err) {
+        sendResponse({ status: 'error', hasPermission: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+
+  // 9. Prompt for optional permissions via dedicated dialog
+  if (message.action === MESSAGE_ACTIONS.PROMPT_PERMISSIONS) {
+    (async () => {
+      try {
+        const alreadyGranted = await chrome.permissions.contains({ origins: ['<all_urls>'] });
+        if (alreadyGranted) {
+          sendResponse({ status: 'ok', granted: true });
+          return;
+        }
+
+        const local = await chrome.storage.local.get(STORAGE_KEYS.LICENSE_STATUS);
+        if (local[STORAGE_KEYS.LICENSE_STATUS] !== 'pro') {
+          sendResponse({ status: 'pro_required', granted: false, error: 'Pro license required' });
+          return;
+        }
+
+        if (permissionWindowId) {
+          try {
+            await chrome.windows.remove(permissionWindowId);
+          } catch (_) {}
+          permissionWindowId = null;
+        }
+
+        pendingPermissionResolver = sendResponse;
+        const permWindow = await chrome.windows.create({
+          url: chrome.runtime.getURL('permission/permission.html'),
+          type: 'popup',
+          width: 480,
+          height: 440,
+          focused: true
+        });
+        permissionWindowId = permWindow.id;
+      } catch (err) {
+        console.error('[BulkGrab Service Worker] Failed to open permission prompt:', err);
+        sendResponse({ status: 'error', granted: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+
+  // 10. Permission response from permission.js
+  if (message.action === MESSAGE_ACTIONS.PERMISSION_RESPONSE) {
+    if (pendingPermissionResolver) {
+      pendingPermissionResolver({ status: 'ok', granted: Boolean(message.granted) });
+      pendingPermissionResolver = null;
+    }
+    permissionWindowId = null;
+    sendResponse({ status: 'ok' });
+    return false;
+  }
+
+  // 11. Create ZIP in background
+  if (message.action === MESSAGE_ACTIONS.CREATE_ZIP) {
+    (async () => {
+      try {
+        const result = await handleCreateZip(message.files, message.zipFilename, tabId);
+        sendResponse(result);
+      } catch (err) {
+        console.error('[BulkGrab Service Worker] CREATE_ZIP error:', err);
+        sendResponse({ status: 'error', message: err.message });
+      }
+    })();
+    return true;
   }
 
   return false;

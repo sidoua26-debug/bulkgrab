@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BulkGrab Pro — Cross-Origin ZIP Permission</title>
+  <link rel="stylesheet" href="permission.css">
+</head>
+<body>
+  <div class="perm-container">
+    <div class="perm-header">
+      <img src="../assets/icons/icon-48.png" alt="BulkGrab" class="perm-icon">
+      <div>
+        <h1 class="perm-title">BulkGrab Pro</h1>
+        <span class="perm-badge">ZIP Archiving Permission</span>
+      </div>
+    </div>
+
+    <div class="perm-body">
+      <h2 class="section-title">Enable Cross-Site ZIP Bundling</h2>
+      <p class="perm-desc">
+        To package files hosted across external servers (such as GitHub, AWS S3, Google Cloud, or CDNs) into a single <code>.zip</code> archive, Chrome requires elevated host permissions.
+      </p>
+
+      <div class="scope-box">
+        <div class="scope-header">
+          <span class="scope-icon">🔍</span>
+          <strong>What Chrome Will Show You</strong>
+        </div>
+        <p class="scope-text">
+          Chrome’s permission dialog will state: <em>"Read and change your data on all websites"</em>.
+        </p>
+        <p class="scope-subtext">
+          <strong>Why:</strong> Chrome has no narrow "read-only downloads from external links" permission. To fetch binary files across different domains and bundle them into a ZIP, Chrome requires the <code>&lt;all_urls&gt;</code> permission.
+        </p>
+        <p class="scope-subtext">
+          <strong>Our Commitment:</strong> This permission lets BulkGrab read data from any site you visit while bundling files, but BulkGrab <em>only</em> reads the specific file URLs you select when you click 📦 ZIP. It never collects, tracks, or transmits your browsing data, history, or credentials.
+        </p>
+      </div>
+
+      <p class="perm-note">
+        This is a one-time request. If you decline, you can still download any file individually via Chrome’s standard download manager. You can also revoke this permission at any time in the Options page.
+      </p>
+    </div>
+
+    <div class="perm-actions">
+      <button id="btn-cancel" class="btn btn-secondary">
+        Cancel &amp; Download Individually
+      </button>
+      <button id="btn-allow" class="btn btn-primary">
+        Allow Cross-Site ZIP Access
+      </button>
+    </div>
+  </div>
+
+  <script type="module" src="permission.js"></script>
+</body>
+</html>

@@ -38,8 +38,16 @@ Chrome Web Store requires a plain-English explanation for every requested permis
 ### `storage`
 > **Justification**: Required to persist user license status (Free vs. Pro) and track session download counts for free-tier quota enforcement.
 
-### Host Permissions
-> **Status**: Left empty by default. All interactions are driven through `activeTab` upon user action.
+### Host Permissions (`host_permissions`)
+> **Status**: Left empty by default (`[]`). No broad host permissions are granted on installation, ensuring users see zero alarming warnings when installing BulkGrab.
+
+### Optional Host Permissions (`optional_host_permissions: ["<all_urls>"]`)
+> **Justification**: Declared as strictly *optional* permissions. This is requested only on-demand when a paying Pro user explicitly triggers the "Download as ZIP" feature on files hosted across external cross-origin servers (such as GitHub raw assets, AWS S3 buckets, or external CDNs).
+>
+> **User Transparency & Safety**:
+> - Free-tier users and users downloading files individually are never prompted for this permission.
+> - The prompt clearly explains that Chrome's dialog will display *"Read and change your data on all websites"*, clarifies that BulkGrab only reads the specific file URLs selected for zipping, and never collects or tracks browsing activity.
+> - If declined, the extension functions fully without it by falling back seamlessly to Chrome's native download manager. Users can also revoke this permission at any time from the Options page.
 
 ---
 

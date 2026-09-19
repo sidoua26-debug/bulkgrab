@@ -322,6 +322,9 @@
             }).join('')}
           </div>
 
+          <!-- Persistent Alert Banner (won't be clobbered by progress updates) -->
+          <div id="alert-banner" class="alert-banner"></div>
+
           <!-- Status / Progress Box -->
           <div id="status-box" class="status-box"></div>
           <div id="progress-container" class="progress-bar-container">
@@ -483,6 +486,19 @@
     });
   }
 
+  function showAlert(message, type = 'info') {
+    const banner = shadowRoot?.getElementById('alert-banner');
+    if (!banner) return;
+    banner.className = `alert-banner alert-${type}`;
+    banner.innerHTML = message;
+    banner.style.display = 'block';
+  }
+
+  function hideAlert() {
+    const banner = shadowRoot?.getElementById('alert-banner');
+    if (banner) banner.style.display = 'none';
+  }
+
   function showStatus(message, type = 'info') {
     const box = shadowRoot.getElementById('status-box');
     if (!box) return;
@@ -580,13 +596,14 @@
   }
 
   /**
-   * Package selected files client-side into a ZIP archive using JSZip (Pro Feature).
+   * Package selected files into a ZIP archive using background Service Worker with elevated permissions (Pro Feature).
    */
   async function startZipDownload() {
     if (selectedUrls.size === 0) return;
 
+    // 1. FREE-TIER GATE: Free-tier users are blocked before any permission logic runs
     if (licenseStatus !== 'pro') {
-      showStatus(
+      showAlert(
         '⭐ <strong>Download as ZIP is a PRO feature!</strong> Upgrade to Pro to bundle unlimited files into a clean ZIP archive, or use standard download.',
         'warning'
       );
@@ -599,57 +616,45 @@
 
     if (zipBtn) {
       zipBtn.disabled = true;
-      zipBtn.innerHTML = '<span>📦 Zipping...</span>';
+      zipBtn.innerHTML = '<span>📦 Preparing...</span>';
     }
     if (downloadBtn) {
       downloadBtn.disabled = true;
     }
 
-    showStatus(`Preparing ZIP archive for ${filesToDownload.length} file(s)...`, 'info');
-    setProgress(0, filesToDownload.length);
-
-    const packagedFiles = [];
-    const failedFiles = [];
+    hideAlert();
+    showStatus(`Checking permissions for ${filesToDownload.length} file(s)...`, 'info');
 
     try {
-      const JSZipLib = window.JSZip;
-      if (!JSZipLib) {
-        throw new Error('JSZip library is not loaded. Please re-open the grabber panel.');
-      }
+      // 2. Check if optional <all_urls> host permission is already granted
+      const permCheck = await chrome.runtime.sendMessage({ action: 'BULKGRAB_CHECK_PERMISSIONS' });
+      let hasPermission = permCheck && permCheck.hasPermission;
 
-      const zip = new JSZipLib();
-
-      for (let i = 0; i < filesToDownload.length; i++) {
-        const file = filesToDownload[i];
-        showStatus(`Fetching (${i + 1}/${filesToDownload.length}): ${escapeHtml(file.filename)}...`, 'info');
-        setProgress(i, filesToDownload.length);
-
-        try {
-          // fetch() in webpage context is subject to CORS
-          const res = await fetch(file.url, { credentials: 'include' });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const buffer = await res.arrayBuffer();
-          zip.file(file.filename, buffer);
-          packagedFiles.push(file);
-        } catch (fetchErr) {
-          console.warn(`[BulkGrab ZIP] CORS or network fetch failure for ${file.url}:`, fetchErr);
-          failedFiles.push({ ...file, error: fetchErr.message });
+      // 3. If not granted, trigger one-time user-gesture prompt dialog window
+      if (!hasPermission) {
+        showStatus('Waiting for permission to fetch cross-site files...', 'info');
+        const promptRes = await chrome.runtime.sendMessage({ action: 'BULKGRAB_PROMPT_PERMISSIONS' });
+        if (promptRes && promptRes.granted) {
+          hasPermission = true;
         }
       }
 
-      // Case 1: None of the files could be fetched (100% CORS blocked)
-      if (packagedFiles.length === 0) {
-        showStatus(
-          `⚠️ None of the ${filesToDownload.length} file(s) could be fetched into a ZIP due to cross-origin (CORS) restrictions.<br>⬇ Downloading all ${filesToDownload.length} files individually via downloads API...`,
+      // 4. Permission declined or cancelled: Graceful fallback with persistent banner
+      if (!hasPermission) {
+        showAlert(
+          '⚠️ <strong>ZIP bundling needs permission to fetch files from other sites</strong> — you can grant this next time, or files will download individually.',
           'warning'
         );
-        // Seamless fallback to chrome.downloads API (which bypasses CORS)
+        showStatus(`⬇ Downloading all ${filesToDownload.length} files individually via browser manager...`, 'info');
+        setProgress(0, filesToDownload.length);
+
         const fallbackRes = await chrome.runtime.sendMessage({
           action: 'BULKGRAB_DOWNLOAD_FILES',
           files: filesToDownload
         });
+
         if (fallbackRes && fallbackRes.status === 'quota_exceeded') {
-          showStatus(`❌ ${escapeHtml(fallbackRes.message)}`, 'error');
+          showAlert(`❌ ${escapeHtml(fallbackRes.message)}`, 'error');
         } else if (fallbackRes && fallbackRes.status === 'ok') {
           sessionDownloads = fallbackRes.sessionDownloads || sessionDownloads;
           updateStatusInUI();
@@ -657,52 +662,54 @@
         return;
       }
 
-      // Case 2: At least some files succeeded
-      showStatus(`Compressing ${packagedFiles.length} file(s) into ZIP...`, 'info');
-      setProgress(filesToDownload.length, filesToDownload.length);
-
-      const base64Data = await zip.generateAsync({ type: 'base64' });
-      const dataUrl = 'data:application/zip;base64,' + base64Data;
+      // 5. Permission granted: Delegate packaging to Service Worker with elevated permissions
+      showStatus(`Packaging ${filesToDownload.length} file(s) into ZIP in background...`, 'info');
+      setProgress(0, filesToDownload.length);
 
       const hostname = window.location.hostname || 'BulkGrab';
       const cleanHost = hostname.replace(/[^a-zA-Z0-9_-]/g, '_');
       const zipFilename = `${cleanHost}_Archive.zip`;
 
-      const response = await chrome.runtime.sendMessage({
-        action: 'BULKGRAB_DOWNLOAD_ZIP',
-        dataUrl: dataUrl,
-        filename: zipFilename
+      const zipRes = await chrome.runtime.sendMessage({
+        action: 'BULKGRAB_CREATE_ZIP',
+        files: filesToDownload,
+        zipFilename: zipFilename
       });
 
-      if (response && response.status === 'ok') {
-        // Case 3: Partial failure (some in ZIP, some failed CORS)
-        if (failedFiles.length > 0) {
-          showStatus(
-            `📦 Bundled ${packagedFiles.length} file(s) into ${escapeHtml(zipFilename)}.<br>` +
-            `⚠️ <strong>${failedFiles.length} file(s) blocked by CORS</strong> — downloading those individually now...`,
+      if (zipRes && zipRes.status === 'ok') {
+        setProgress(filesToDownload.length, filesToDownload.length);
+        if (zipRes.failedCount > 0) {
+          showAlert(
+            `📦 Bundled ${zipRes.packagedCount} file(s) into <strong>${escapeHtml(zipFilename)}</strong>.<br>` +
+            `⚠️ <strong>${zipRes.failedCount} file(s) failed network fetch</strong> — downloading those individually now...`,
             'warning'
           );
-
-          // Download CORS-blocked files individually via downloads API
-          const fallbackRes = await chrome.runtime.sendMessage({
-            action: 'BULKGRAB_DOWNLOAD_FILES',
-            files: failedFiles
-          });
-          if (fallbackRes && fallbackRes.status === 'quota_exceeded') {
-            showStatus(`❌ ${escapeHtml(fallbackRes.message)}`, 'error');
-          } else if (fallbackRes && fallbackRes.status === 'ok') {
-            sessionDownloads = fallbackRes.sessionDownloads || sessionDownloads;
-            updateStatusInUI();
+          if (zipRes.failedFiles && zipRes.failedFiles.length) {
+            await chrome.runtime.sendMessage({
+              action: 'BULKGRAB_DOWNLOAD_FILES',
+              files: zipRes.failedFiles
+            });
           }
         } else {
-          showStatus(`✅ ZIP archive (${packagedFiles.length} files) saved as ${escapeHtml(zipFilename)}!`, 'info');
-          setTimeout(hideStatus, 6000);
+          showAlert(`✅ ZIP archive (${zipRes.packagedCount} files) saved as <strong>${escapeHtml(zipFilename)}</strong>!`, 'info');
+          setTimeout(hideAlert, 6000);
         }
+        hideStatus();
+      } else if (zipRes && zipRes.status === 'all_failed') {
+        showAlert(
+          `⚠️ None of the files could be fetched for the ZIP archive (network error).<br>⬇ Downloading all ${filesToDownload.length} files individually...`,
+          'warning'
+        );
+        await chrome.runtime.sendMessage({
+          action: 'BULKGRAB_DOWNLOAD_FILES',
+          files: filesToDownload
+        });
       } else {
-        showStatus(`❌ ZIP download error: ${escapeHtml(response?.message || 'Download failed')}`, 'error');
+        showAlert(`❌ ZIP packaging error: ${escapeHtml(zipRes?.message || 'Packaging failed')}`, 'error');
       }
     } catch (err) {
-      showStatus(`❌ ZIP packaging error: ${escapeHtml(err.message)}`, 'error');
+      console.error('[BulkGrab] ZIP flow error:', err);
+      showAlert(`❌ ZIP error: ${escapeHtml(err.message)}`, 'error');
     } finally {
       if (zipBtn) {
         zipBtn.disabled = selectedUrls.size === 0;
@@ -793,7 +800,10 @@
 
     if (message.action === 'BULKGRAB_DOWNLOAD_PROGRESS') {
       const safeFilename = escapeHtml(message.filename);
-      if (message.state === 'downloading') {
+      if (message.state === 'zipping') {
+        showStatus(`Zipping (${message.index}/${message.total}): ${safeFilename}...`, 'info');
+        setProgress(message.index - 1, message.total);
+      } else if (message.state === 'downloading') {
         showStatus(`Downloading (${message.index}/${message.total}): ${safeFilename}...`, 'info');
         setProgress(message.index - 1, message.total);
       } else if (message.state === 'completed') {

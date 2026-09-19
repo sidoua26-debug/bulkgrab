@@ -20,6 +20,9 @@
 
   "_comment_host_permissions": "Left empty by default. activeTab and scripting handle active pages upon user action. To scope to specific sites, add URL patterns like 'https://example.com/*' into host_permissions below.",
   "host_permissions": [],
+  "optional_host_permissions": [
+    "<all_urls>"
+  ],
 
   "background": {
     "service_worker": "background/service-worker.js",

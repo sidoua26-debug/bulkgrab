@@ -609,6 +609,177 @@ async function runTests() {
       await page.close();
     });
 
+    // =========================================================================
+    // TEST 12: Free-tier user clicking ZIP is gated before permission checks run
+    // =========================================================================
+    await test('Free-tier user clicking ZIP is blocked by tier gate and never triggers permission prompt', async () => {
+      const page = await browser.newPage();
+
+      await page.evaluateOnNewDocument((id) => {
+        window.chrome = window.chrome || {};
+        window.chrome.runtime = window.chrome.runtime || {};
+        window.chrome.runtime.getURL = (rel) => `chrome-extension://${id}/${rel}`;
+        window.chrome.runtime.sendMessage = async (msg) => {
+          if (msg.action === 'BULKGRAB_GET_STATUS') {
+            return { status: 'ok', licenseStatus: 'free', sessionDownloads: 0, freeLimit: 7 };
+          }
+          if (msg.action === 'BULKGRAB_PROMPT_PERMISSIONS' || msg.action === 'BULKGRAB_CHECK_PERMISSIONS') {
+            window.__PERM_REQUESTED__ = true;
+          }
+          return { status: 'ok' };
+        };
+      }, extId);
+
+      await page.goto(`http://localhost:${TEST_PORT}/test-page.html`, { waitUntil: 'domcontentloaded' });
+      await page.addScriptTag({ path: path.join(__dirname, '../content/content-script.js') });
+      await page.waitForFunction(() => window.__BULKGRAB_INITIALIZED__ === true, { timeout: 5000 });
+
+      // Select first file and click ZIP button
+      const alertData = await page.evaluate(async () => {
+        const root = document.getElementById('bulkgrab-root');
+        const shadow = root.shadowRoot;
+        const firstCb = shadow.querySelector('.file-checkbox');
+        if (firstCb && !firstCb.checked) firstCb.click();
+        const zipBtn = shadow.getElementById('btn-zip');
+        zipBtn.click();
+
+        await new Promise(r => setTimeout(r, 50));
+        const banner = shadow.getElementById('alert-banner');
+        return {
+          bannerDisplay: banner?.style?.display,
+          bannerText: banner?.textContent || '',
+          permRequested: Boolean(window.__PERM_REQUESTED__)
+        };
+      });
+
+      assert.strictEqual(alertData.bannerDisplay, 'block', 'Alert banner should be visible');
+      assert(alertData.bannerText.includes('Download as ZIP is a PRO feature'), 'Banner should display Pro upgrade message');
+      assert.strictEqual(alertData.permRequested, false, 'Permission request must never be triggered for free users');
+
+      await page.close();
+    });
+
+    // =========================================================================
+    // TEST 13: Permission declined → graceful fallback with persistent warning banner
+    // =========================================================================
+    await test('Permission declined falls back gracefully and persistent alert banner is not clobbered by progress', async () => {
+      const page = await browser.newPage();
+
+      await page.evaluateOnNewDocument((id) => {
+        window.chrome = window.chrome || {};
+        window.chrome.runtime = window.chrome.runtime || {};
+        window.chrome.runtime.getURL = (rel) => `chrome-extension://${id}/${rel}`;
+        const listeners = [];
+        window.chrome.runtime.onMessage = {
+          addListener: (fn) => listeners.push(fn)
+        };
+        window.__simulateMessage = (msg) => {
+          for (const fn of listeners) fn(msg);
+        };
+        window.chrome.runtime.sendMessage = async (msg) => {
+          if (msg.action === 'BULKGRAB_GET_STATUS') {
+            return { status: 'ok', licenseStatus: 'pro', sessionDownloads: 0, freeLimit: 7 };
+          }
+          if (msg.action === 'BULKGRAB_CHECK_PERMISSIONS') {
+            return { status: 'ok', hasPermission: false };
+          }
+          if (msg.action === 'BULKGRAB_PROMPT_PERMISSIONS') {
+            return { status: 'ok', granted: false };
+          }
+          if (msg.action === 'BULKGRAB_DOWNLOAD_FILES') {
+            return { status: 'ok', sessionDownloads: 0 };
+          }
+          return { status: 'ok' };
+        };
+      }, extId);
+
+      await page.goto(`http://localhost:${TEST_PORT}/test-page.html`, { waitUntil: 'domcontentloaded' });
+      await page.addScriptTag({ path: path.join(__dirname, '../content/content-script.js') });
+      await page.waitForFunction(() => window.__BULKGRAB_INITIALIZED__ === true, { timeout: 5000 });
+
+      // Click ZIP
+      const result = await page.evaluate(async () => {
+        const root = document.getElementById('bulkgrab-root');
+        const shadow = root.shadowRoot;
+        const firstCb = shadow.querySelector('.file-checkbox');
+        if (firstCb && !firstCb.checked) firstCb.click();
+        const zipBtn = shadow.getElementById('btn-zip');
+        zipBtn.click();
+
+        await new Promise(r => setTimeout(r, 100));
+
+        // Simulate incoming DOWNLOAD_PROGRESS message from SW
+        window.__simulateMessage({
+          action: 'BULKGRAB_DOWNLOAD_PROGRESS',
+          index: 1,
+          total: 5,
+          filename: 'test.pdf',
+          state: 'downloading'
+        });
+
+        const banner = shadow.getElementById('alert-banner');
+        const statusBox = shadow.getElementById('status-box');
+
+        return {
+          bannerDisplay: banner?.style?.display,
+          bannerText: banner?.textContent || '',
+          statusBoxText: statusBox?.textContent || '',
+          bannerPreserved: banner?.textContent?.includes('ZIP bundling needs permission')
+        };
+      });
+
+      assert.strictEqual(result.bannerDisplay, 'block', 'Alert banner must remain visible');
+      assert.strictEqual(result.bannerPreserved, true, 'Alert banner must NOT be clobbered by download progress');
+      assert(result.statusBoxText.includes('Downloading (1/5)'), 'Status box should reflect individual download progress independently');
+
+      await page.close();
+    });
+
+    // =========================================================================
+    // TEST 14: Permission granted → background Service Worker creates ZIP archive
+    // =========================================================================
+    await test('Permission granted allows Service Worker to create ZIP archive via CREATE_ZIP', async () => {
+      const sw = await swTarget.worker();
+      await sw.evaluate(async () => {
+        await chrome.storage.local.set({ licenseStatus: 'pro' });
+        chrome.downloads.download = async () => 1001;
+        self.__origFetch = self.fetch;
+        self.fetch = async () => ({
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => new Uint8Array([37, 80, 68, 70, 45, 49, 46, 52]).buffer
+        });
+      });
+
+      const extPage = await browser.newPage();
+      await extPage.goto(`chrome-extension://${extId}/options/options.html`, { waitUntil: 'domcontentloaded' });
+
+      const zipResult = await extPage.evaluate(async (port) => {
+        const testFiles = [
+          { url: `http://localhost:${port}/cors-ok.pdf`, filename: 'doc1.pdf' },
+          { url: `http://localhost:${port}/cors-blocked.pdf`, filename: 'doc2.pdf' }
+        ];
+        return await chrome.runtime.sendMessage({
+          action: 'BULKGRAB_CREATE_ZIP',
+          files: testFiles,
+          zipFilename: 'Test_Archive.zip'
+        });
+      }, TEST_PORT);
+
+      // Restore fetch in SW
+      await sw.evaluate(() => {
+        if (self.__origFetch) self.fetch = self.__origFetch;
+      });
+
+      assert.strictEqual(zipResult.status, 'ok', 'CREATE_ZIP should return status ok');
+      assert.strictEqual(zipResult.downloadId, 1001, 'CREATE_ZIP should trigger chrome.downloads.download');
+      assert.strictEqual(zipResult.packagedCount, 2, 'Both files should be successfully fetched and bundled in SW');
+      assert.strictEqual(zipResult.failedCount, 0, 'No files should fail in SW with elevated permissions');
+      assert.strictEqual(zipResult.zipFilename, 'Test_Archive.zip', 'Archive filename should match');
+
+      await extPage.close();
+    });
+
   } finally {
     if (browser) await browser.close();
     if (server) server.close();

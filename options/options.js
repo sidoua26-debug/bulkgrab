@@ -26,6 +26,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     statusMsg.style.display = 'none';
   }
 
+  const permBadge = document.getElementById('perm-badge');
+  const btnTogglePerm = document.getElementById('btn-toggle-perm');
+
   // Render status in UI
   async function refreshUI() {
     hideMessage();
@@ -57,10 +60,45 @@ document.addEventListener('DOMContentLoaded', async () => {
           btnActivate.textContent = 'Activate Pro';
         }
       }
+
+      // Check optional permissions state
+      if (chrome.permissions && chrome.permissions.contains) {
+        const hasPerm = await chrome.permissions.contains({ origins: ['<all_urls>'] });
+        if (hasPerm) {
+          permBadge.textContent = 'Granted';
+          permBadge.className = 'badge badge-pro';
+          btnTogglePerm.textContent = 'Revoke Access';
+        } else {
+          permBadge.textContent = 'Not Granted';
+          permBadge.className = 'badge badge-free';
+          btnTogglePerm.textContent = 'Grant Cross-Site Access';
+        }
+      }
     } catch (err) {
       console.warn('[BulkGrab Options] Could not get status:', err);
     }
   }
+
+  // Toggle optional permissions
+  btnTogglePerm?.addEventListener('click', async () => {
+    try {
+      const hasPerm = await chrome.permissions.contains({ origins: ['<all_urls>'] });
+      if (hasPerm) {
+        await chrome.permissions.remove({ origins: ['<all_urls>'] });
+        showMessage('Cross-site permission revoked.', 'info');
+      } else {
+        const granted = await chrome.permissions.request({ origins: ['<all_urls>'] });
+        if (granted) {
+          showMessage('Cross-site ZIP access granted!', 'success');
+        } else {
+          showMessage('Permission was not granted.', 'error');
+        }
+      }
+      await refreshUI();
+    } catch (err) {
+      showMessage(`Permission error: ${err.message}`, 'error');
+    }
+  });
 
   await refreshUI();
 
