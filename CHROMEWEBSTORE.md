@@ -43,14 +43,17 @@ Chrome Web Store requires a plain-English explanation for every requested permis
 
 ---
 
-## Asset Checklist for Submission
+## Asset Checklist & Pre-Submission Notes
 
 - [ ] **Icons**:
   - [x] Placeholder icons generated (16x16, 48x48, 128x128)
   - [ ] **Action required before final submission**: Replace with polished final brand icons.
+- [ ] **Licensing Backend (CRITICAL)**:
+  - [ ] **Action required before final submission**: The current build contains a local development stub (`verifyLicense` in `background/service-worker.js`) that validates test session IDs starting with `cs_test_`. For production Web Store release, deploy the provided Cloudflare Worker (see `README.md`) to verify Stripe checkout sessions against the Stripe API, and update the endpoint URL in `background/service-worker.js`.
 - [ ] **Store Promotional Screenshots**:
   - [ ] 1280x800 or 640x400 screenshot of in-page floating grabber panel.
   - [ ] Screenshot of Popup UI showing detected file stats.
   - [ ] Screenshot of options/licensing interface.
 - [ ] **Privacy Policy**:
   - BulkGrab does not transmit user data, webpage contents, or browsing history to external servers. All operations occur client-side.
+

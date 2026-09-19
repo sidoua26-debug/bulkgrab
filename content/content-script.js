@@ -608,6 +608,9 @@
     showStatus(`Preparing ZIP archive for ${filesToDownload.length} file(s)...`, 'info');
     setProgress(0, filesToDownload.length);
 
+    const packagedFiles = [];
+    const failedFiles = [];
+
     try {
       const JSZipLib = window.JSZip;
       if (!JSZipLib) {
@@ -615,29 +618,41 @@
       }
 
       const zip = new JSZipLib();
-      let packagedCount = 0;
 
       for (let i = 0; i < filesToDownload.length; i++) {
         const file = filesToDownload[i];
-        showStatus(`Adding (${i + 1}/${filesToDownload.length}): ${escapeHtml(file.filename)}...`, 'info');
+        showStatus(`Fetching (${i + 1}/${filesToDownload.length}): ${escapeHtml(file.filename)}...`, 'info');
         setProgress(i, filesToDownload.length);
 
         try {
+          // fetch() in webpage context is subject to CORS
           const res = await fetch(file.url, { credentials: 'include' });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const buffer = await res.arrayBuffer();
           zip.file(file.filename, buffer);
-          packagedCount++;
+          packagedFiles.push(file);
         } catch (fetchErr) {
-          console.warn(`[BulkGrab ZIP] Could not fetch ${file.url}:`, fetchErr);
+          console.warn(`[BulkGrab ZIP] CORS or network fetch failure for ${file.url}:`, fetchErr);
+          failedFiles.push({ ...file, error: fetchErr.message });
         }
       }
 
-      if (packagedCount === 0) {
-        throw new Error('None of the selected files could be retrieved for the archive.');
+      // Case 1: None of the files could be fetched (100% CORS blocked)
+      if (packagedFiles.length === 0) {
+        showStatus(
+          `⚠️ None of the ${filesToDownload.length} file(s) could be fetched into a ZIP due to cross-origin (CORS) restrictions.<br>⬇ Downloading all ${filesToDownload.length} files individually via downloads API...`,
+          'warning'
+        );
+        // Seamless fallback to chrome.downloads API (which bypasses CORS)
+        await chrome.runtime.sendMessage({
+          action: 'BULKGRAB_DOWNLOAD_FILES',
+          files: filesToDownload
+        });
+        return;
       }
 
-      showStatus('Compressing ZIP archive...', 'info');
+      // Case 2: At least some files succeeded
+      showStatus(`Compressing ${packagedFiles.length} file(s) into ZIP...`, 'info');
       setProgress(filesToDownload.length, filesToDownload.length);
 
       const base64Data = await zip.generateAsync({ type: 'base64' });
@@ -654,8 +669,23 @@
       });
 
       if (response && response.status === 'ok') {
-        showStatus(`✅ ZIP archive (${packagedCount} files) saved as ${escapeHtml(zipFilename)}!`, 'info');
-        setTimeout(hideStatus, 6000);
+        // Case 3: Partial failure (some in ZIP, some failed CORS)
+        if (failedFiles.length > 0) {
+          showStatus(
+            `📦 Bundled ${packagedFiles.length} file(s) into ${escapeHtml(zipFilename)}.<br>` +
+            `⚠️ <strong>${failedFiles.length} file(s) blocked by CORS</strong> — downloading those individually now...`,
+            'warning'
+          );
+
+          // Download CORS-blocked files individually via downloads API
+          await chrome.runtime.sendMessage({
+            action: 'BULKGRAB_DOWNLOAD_FILES',
+            files: failedFiles
+          });
+        } else {
+          showStatus(`✅ ZIP archive (${packagedFiles.length} files) saved as ${escapeHtml(zipFilename)}!`, 'info');
+          setTimeout(hideStatus, 6000);
+        }
       } else {
         showStatus(`❌ ZIP download error: ${escapeHtml(response?.message || 'Download failed')}`, 'error');
       }

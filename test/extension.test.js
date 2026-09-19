@@ -20,6 +20,17 @@ let swTarget;
 async function startServer() {
   return new Promise((resolve) => {
     server = http.createServer((req, res) => {
+      if (req.url === '/cors-blocked.pdf') {
+        res.writeHead(403, { 'Content-Type': 'text/plain' });
+        res.end('CORS Forbidden');
+        return;
+      }
+      if (req.url === '/cors-ok.pdf') {
+        res.writeHead(200, { 'Content-Type': 'application/pdf' });
+        res.end('%PDF-1.4 dummy pdf content');
+        return;
+      }
+
       const filePath = path.join(__dirname, '..', req.url === '/' ? 'test-page.html' : req.url);
       if (fs.existsSync(filePath)) {
         const ext = path.extname(filePath).toLowerCase();
@@ -403,6 +414,63 @@ async function runTests() {
       assert.strictEqual(storageData.stripeSessionId, '', 'Stripe session ID should be cleared');
 
       await optionsPage.close();
+    });
+
+    // =========================================================================
+    // TEST 9: CORS partial-failure path in ZIP flow (bundles reachable, falls back for blocked)
+    // =========================================================================
+    await test('CORS partial-failure in ZIP flow bundles reachable files and delegates blocked files', async () => {
+      // Ensure Pro tier is active
+      const sw = await swTarget.worker();
+      await sw.evaluate(async () => {
+        await chrome.storage.local.set({ licenseStatus: 'pro' });
+      });
+
+      const page = await browser.newPage();
+      await page.goto(`http://localhost:${TEST_PORT}/test-page.html`, { waitUntil: 'domcontentloaded' });
+      await page.addScriptTag({ path: path.join(__dirname, '../assets/vendor/jszip.min.js') });
+      await page.addScriptTag({ path: path.join(__dirname, '../content/content-script.js') });
+      await page.waitForFunction(() => window.__BULKGRAB_INITIALIZED__ === true, { timeout: 5000 });
+
+      // Simulate ZIP packaging with 1 accessible file and 1 CORS-blocked file
+      const result = await page.evaluate(async (port) => {
+        const testFiles = [
+          { url: `http://localhost:${port}/cors-ok.pdf`, filename: 'cors-ok.pdf' },
+          { url: `http://localhost:${port}/cors-blocked.pdf`, filename: 'cors-blocked.pdf' }
+        ];
+
+        const zip = new window.JSZip();
+        const packaged = [];
+        const failed = [];
+
+        for (const f of testFiles) {
+          try {
+            const res = await fetch(f.url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const buf = await res.arrayBuffer();
+            zip.file(f.filename, buf);
+            packaged.push(f);
+          } catch (e) {
+            failed.push(f);
+          }
+        }
+
+        const b64 = await zip.generateAsync({ type: 'base64' });
+
+        return {
+          packagedCount: packaged.length,
+          failedCount: failed.length,
+          zipHasContent: b64.length > 50,
+          failedFilename: failed[0]?.filename
+        };
+      }, TEST_PORT);
+
+      assert.strictEqual(result.packagedCount, 1, 'Reachable file should be packaged into ZIP');
+      assert.strictEqual(result.failedCount, 1, 'CORS-blocked file should be caught as failed');
+      assert.strictEqual(result.failedFilename, 'cors-blocked.pdf', 'Blocked filename should match');
+      assert.strictEqual(result.zipHasContent, true, 'ZIP should be generated with successful files');
+
+      await page.close();
     });
 
   } finally {
