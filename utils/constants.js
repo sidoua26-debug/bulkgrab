@@ -48,7 +48,7 @@ export function getFileCategory(extension) {
 }
 
 // Free tier limit: Maximum downloads allowed per session
-export const FREE_DOWNLOAD_LIMIT = 3;
+export const FREE_DOWNLOAD_LIMIT = 7;
 
 // Storage keys for chrome.storage
 export const STORAGE_KEYS = {
@@ -70,7 +70,8 @@ export const MESSAGE_ACTIONS = {
   GET_PAGE_FILES: 'BULKGRAB_GET_PAGE_FILES',
   TOGGLE_PANEL: 'BULKGRAB_TOGGLE_PANEL',
   RESCAN: 'BULKGRAB_RESCAN',
-  UPDATE_BADGE: 'BULKGRAB_UPDATE_BADGE'
+  UPDATE_BADGE: 'BULKGRAB_UPDATE_BADGE',
+  LICENSE_UPDATED: 'BULKGRAB_LICENSE_UPDATED'
 };
 
 // Stripe checkout / payment link placeholder

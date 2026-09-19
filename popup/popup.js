@@ -86,7 +86,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (used >= freeLimit) {
           quotaFill.className = 'quota-fill full';
           if (quotaNote) quotaNote.innerHTML = '<strong>Quota reached!</strong> Upgrade to Pro for unlimited downloads.';
-        } else if (used >= 2) {
+        } else if (used >= freeLimit - 1 && freeLimit > 1) {
           quotaFill.className = 'quota-fill warn';
           if (quotaNote) quotaNote.textContent = `${freeLimit - used} download remaining in this session.`;
         } else {

@@ -221,7 +221,7 @@ async function runTests() {
       assert.strictEqual(popupStats.imagesPill, '🖼️ 4 Images');
       assert.strictEqual(popupStats.archivesPill, '📦 1 Archives');
       assert.strictEqual(popupStats.mediaPill, '🎵 2 Media');
-      assert(popupStats.quotaText.includes('/ 3'), 'Quota text should display / 3 format');
+      assert(popupStats.quotaText.includes('/ 7'), 'Quota text should display / 7 format');
       assert(popupStats.upgradeHref.includes('buy.stripe.com'), 'Upgrade button should point to Stripe checkout');
 
       await popupPage.close();
@@ -230,7 +230,7 @@ async function runTests() {
     // =========================================================================
     // TEST 4: Free-Tier Quota Cap & Over-Quota Rejection
     // =========================================================================
-    await test('Free-tier allows max 3 downloads and asserts quota_exceeded on 4th attempt', async () => {
+    await test('Free-tier allows max 7 downloads and asserts quota_exceeded on 8th attempt', async () => {
       const extPage = await browser.newPage();
       await extPage.goto(`chrome-extension://${extId}/options/options.html`, { waitUntil: 'domcontentloaded' });
 
@@ -240,32 +240,33 @@ async function runTests() {
       });
       assert.strictEqual(resetRes.sessionDownloads, 0, 'Session downloads should reset to 0');
 
-      // 2. Attempt selecting 4 files at once -> Should immediately be blocked
-      const fourFiles = [
-        { url: 'https://example.com/file1.pdf', filename: 'file1.pdf' },
-        { url: 'https://example.com/file2.pdf', filename: 'file2.pdf' },
-        { url: 'https://example.com/file3.pdf', filename: 'file3.pdf' },
-        { url: 'https://example.com/file4.pdf', filename: 'file4.pdf' }
-      ];
+      // 2. Attempt selecting 8 files at once -> Should immediately be blocked
+      const eightFiles = Array.from({ length: 8 }, (_, i) => ({
+        url: `https://example.com/file${i + 1}.pdf`,
+        filename: `file${i + 1}.pdf`
+      }));
 
       const overQuotaAttempt = await extPage.evaluate(async (files) => {
         return await chrome.runtime.sendMessage({ action: 'BULKGRAB_DOWNLOAD_FILES', files });
-      }, fourFiles);
+      }, eightFiles);
 
-      assert.strictEqual(overQuotaAttempt.status, 'quota_exceeded', 'Attempting 4 files should return quota_exceeded');
-      assert.strictEqual(overQuotaAttempt.limit, 3, 'Limit should be 3');
-      assert(overQuotaAttempt.message.includes('allows up to 3 downloads'), 'Should provide helpful quota message');
+      assert.strictEqual(overQuotaAttempt.status, 'quota_exceeded', 'Attempting 8 files should return quota_exceeded');
+      assert.strictEqual(overQuotaAttempt.limit, 7, 'Limit should be 7');
+      assert(overQuotaAttempt.message.includes('allows up to 7 downloads'), 'Should provide helpful quota message');
 
-      // 3. Increment downloads in session to 3 (simulating 3 downloads completed)
+      // 3. Increment downloads in session to 7 (simulating 7 downloads completed)
       await extPage.evaluate(async () => {
-        await chrome.storage.session.set({ sessionDownloadCount: 3 });
+        await chrome.storage.session.set({ sessionDownloadCount: 7 });
       });
 
-      // 4. Attempt a 4th single download -> Should be rejected with quota_exceeded
+      // 4. Attempt an 8th single download -> Should be rejected with quota_exceeded
       const singleFile = [{ url: 'https://example.com/extra.pdf', filename: 'extra.pdf' }];
-      const fourthAttempt = await extPage.evaluate(async (files) => {
+      const eighthAttempt = await extPage.evaluate(async (files) => {
         return await chrome.runtime.sendMessage({ action: 'BULKGRAB_DOWNLOAD_FILES', files });
       }, singleFile);
+
+      assert.strictEqual(eighthAttempt.status, 'quota_exceeded', '8th attempt must return quota_exceeded');
+      assert.strictEqual(eighthAttempt.limit, 7, 'Limit must be 7');
 
       await extPage.close();
     });
@@ -542,7 +543,7 @@ async function runTests() {
         window.chrome.runtime.getURL = (rel) => `chrome-extension://${id}/${rel}`;
         window.chrome.runtime.sendMessage = async (msg) => {
           if (msg.action === 'BULKGRAB_GET_STATUS') {
-            return { status: 'ok', licenseStatus: 'free', sessionDownloads: 0, freeLimit: 3 };
+            return { status: 'ok', licenseStatus: 'free', sessionDownloads: 0, freeLimit: 7 };
           }
           return { status: 'ok' };
         };
@@ -578,7 +579,7 @@ async function runTests() {
       assert.strictEqual(initialUI.tierTag, 'FREE', 'Initial tier tag should be FREE');
       assert.strictEqual(initialUI.zipBtn, '🔒 ZIP (PRO)', 'ZIP button should show locked status');
       assert.strictEqual(initialUI.isZipLocked, true, 'ZIP button should have locked class');
-      assert(initialUI.quotaSummary.includes('Session Quota:'), 'Quota summary should show session limits');
+      assert(initialUI.quotaSummary.includes('Session Quota: 0/7 used (7 left)'), 'Quota summary should show session limits');
 
       // 2. Simulate Pro activation via chrome.storage.local change without any page reload or navigation
       await page.evaluate(() => {

@@ -3,7 +3,7 @@
  * Manages license activation stub, tier inspection, and reset controls.
  */
 
-import { MESSAGE_ACTIONS } from '../utils/constants.js';
+import { MESSAGE_ACTIONS, FREE_DOWNLOAD_LIMIT } from '../utils/constants.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const tierBadge = document.getElementById('tier-badge');
@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           tierBadge.textContent = 'Free Plan';
           tierBadge.className = 'badge badge-free';
           const used = res.sessionDownloads || 0;
-          tierDescription.textContent = `You are on the Free Plan. Quota: ${used} / ${res.freeLimit || 3} downloads used this session. Single-file sequential downloading only.`;
+          tierDescription.textContent = `You are on the Free Plan. Quota: ${used} / ${res.freeLimit || FREE_DOWNLOAD_LIMIT} downloads used this session. Single-file sequential downloading only.`;
           sessionInfoBox.style.display = 'none';
           sessionIdInput.value = '';
           btnActivate.textContent = 'Activate Pro';

@@ -12,7 +12,7 @@
   Key Features:
   • Smart Detection: Automatically detects downloadable files (PDFs, images, audio, video, documents, and archives).
   • Interactive In-Page Panel: View all detected files in a non-intrusive floating panel with instant search and select-all controls.
-  • Freemium Flexibility: Download up to 3 files per session for free, or unlock Pro for unlimited batch downloading.
+  • Freemium Flexibility: Download up to 7 files per session for free, or unlock Pro for unlimited batch downloading.
   • Client-Side ZIP Packaging: Bundle multiple files into a single organized ZIP archive directly inside your browser.
   • Privacy First: All scanning and file bundling happens locally on your device.
 

@@ -71,7 +71,7 @@
   let searchQuery = '';
   let licenseStatus = 'free';
   let sessionDownloads = 0;
-  let freeLimit = 3;
+  let freeLimit = 7;
   let isPanelMinimized = false;
   let isPanelVisible = true;
 
@@ -83,7 +83,7 @@
       if (res && res.status === 'ok') {
         licenseStatus = res.licenseStatus || 'free';
         sessionDownloads = res.sessionDownloads || 0;
-        freeLimit = res.freeLimit || 3;
+        freeLimit = res.freeLimit || 7;
         updateStatusInUI();
       }
     } catch (err) {
@@ -801,6 +801,16 @@
       } else if (message.state === 'failed') {
         showStatus(`⚠️ Failed to download: ${safeFilename}`, 'warning');
       }
+      return false;
+    }
+
+    if (message.action === 'BULKGRAB_LICENSE_UPDATED') {
+      licenseStatus = message.licenseStatus || 'free';
+      if (shadowRoot) {
+        renderUI();
+        updateStatusInUI();
+      }
+      sendResponse({ status: 'ok', licenseStatus });
       return false;
     }
 

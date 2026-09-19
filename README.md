@@ -18,13 +18,13 @@ BulkGrab is a lightweight, privacy-focused Chrome Extension (Manifest V3) that d
   - Download buttons: "⬇ Download Selected" and "📦 ZIP" (Pro).
 - **Service Worker (`background/service-worker.js`)**:
   - Coordinates `chrome.downloads.download` API calls.
-  - Free tier: allows up to 3 downloads per browser session, executed sequentially one at a time.
+  - Free tier: allows up to 7 downloads per browser session, executed sequentially one at a time.
   - Pro tier: unlimited batch downloads and client-side ZIP archiving.
   - Listens to `chrome.tabs.onUpdated` to clear toolbar badges on page navigation.
 - **Action Popup (`popup/popup.html`, `popup.js`, `popup.css`)**:
   - Displays the active page's domain and total downloadable file count.
   - Category breakdown pills (`📄 Docs`, `🖼️ Images`, `📦 Archives`, `🎵 Media`).
-  - Session quota progress bar (`X / 3 used`).
+  - Session quota progress bar (`X / 7 used`).
   - Direct "Open Grabber Panel", "Rescan Page", and "Upgrade to Pro" triggers.
 - **Settings & Licensing (`options/options.html`, `options.js`)**:
   - Manage license tier (`Free` vs `Pro`).
@@ -159,15 +159,18 @@ Run the full Puppeteer test suite:
 npm test
 ```
 
-This runs 8 automated end-to-end tests validating:
+This runs 11 automated end-to-end tests validating:
 - DOM scanning & Shadow DOM file listing.
 - Tab-scoped badge count updates.
 - Popup hero numbers & category breakdown pills.
-- Free-tier 3-download session limit enforcement and rejection.
+- Free-tier 7-download session limit enforcement and rejection.
 - Badge clearing on tab navigation.
 - Options page license verification stub.
 - Pro-tier batch downloading & JSZip archive creation.
 - Resetting back to Free plan.
+- CORS partial-failure ZIP bundling & fallback download delegation.
+- Grabber panel rendering without stack overflow.
+- Dynamic license tier update via storage events without page reload.
 
 ---
 
@@ -176,9 +179,9 @@ This runs 8 automated end-to-end tests validating:
 1. **Unpacked Load**: Load extension in `chrome://extensions` — verify no error badges.
 2. **Detection**: Open `http://localhost:8080/test-page.html`, click extension icon -> **Open Grabber Panel** — verify 11 files detected across tabs (`Docs`, `Images`, `Archives`, `Media`).
 3. **Selection**: Toggle **Select All**, filter by category tab, deselect individual files.
-4. **Free Quota Cap**: Select 4 files on Free tier and click download — verify quota warning appears.
-5. **Sequential Download**: Select 2 files on Free tier — verify files download one after another and session quota updates to `2 / 3 used`.
+4. **Free Quota Cap**: Select 8 files on Free tier and click download — verify quota warning appears.
+5. **Sequential Download**: Select 2 files on Free tier — verify files download one after another and session quota updates to `2 / 7 used`.
 6. **Navigation Badge Clear**: Navigate tab to a new URL — verify toolbar badge clears immediately.
-7. **License Upgrade**: Open Options, enter `cs_test_sample`, click **Activate Pro** — verify Pro Active badge appears.
+7. **License Upgrade**: Open Options, enter `cs_test_sample`, click **Activate Pro** — verify Pro Active badge appears and open tabs immediately unlock without reload.
 8. **Pro ZIP Bundling**: In the floating panel, select files and click **📦 ZIP** — verify JSZip bundles files client-side into a `.zip` archive.
-9. **Reset**: In Options, click **Reset to Free Tier** — verify status downgrades back to Free.
+9. **Reset**: In Options, click **Reset to Free Tier** — verify status downgrades back to Free across all open tabs.

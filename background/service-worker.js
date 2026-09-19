@@ -85,6 +85,9 @@ export async function verifyLicense(sessionId) {
 
   console.log(`[BulkGrab Service Worker] Stub license verified. Pro tier activated for session: ${trimmed}`);
 
+  // Broadcast to all active tabs to update in-page UI immediately
+  broadcastLicenseChange('pro');
+
   return {
     valid: true,
     status: 'pro',
@@ -102,7 +105,28 @@ export async function resetLicense() {
     [STORAGE_KEYS.STRIPE_SESSION_ID]: ''
   });
   console.log('[BulkGrab Service Worker] License status reset to free.');
+
+  // Broadcast to all active tabs to revert in-page UI immediately
+  broadcastLicenseChange('free');
+
   return { valid: true, status: 'free', message: 'License reset to Free tier.' };
+}
+
+/**
+ * Broadcast license status changes to all open tabs.
+ */
+async function broadcastLicenseChange(newStatus) {
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (tab.id) {
+        chrome.tabs.sendMessage(tab.id, {
+          action: MESSAGE_ACTIONS.LICENSE_UPDATED,
+          licenseStatus: newStatus
+        }).catch(() => {});
+      }
+    }
+  } catch (_) {}
 }
 
 /**
@@ -140,7 +164,7 @@ function waitForDownloadCompletion(downloadId, timeoutMs = 60000) {
 
 /**
  * Process a batch of files for download.
- * Free tier: enforces 3-download session limit and downloads one at a time.
+ * Free tier: enforces 7-download session limit and downloads one at a time.
  * Pro tier: unlimited batch downloads.
  */
 async function handleDownloadFiles(files, senderTabId) {
