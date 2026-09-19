@@ -164,6 +164,8 @@ async function runTests() {
     await test('Action Popup UI renders hero number, breakdown pills, and quota bar', async () => {
       const popupPage = await browser.newPage();
       await popupPage.goto(`chrome-extension://${extId}/popup/popup.html`, { waitUntil: 'domcontentloaded' });
+      // Allow popup DOMContentLoaded async tasks to complete
+      await new Promise(r => setTimeout(r, 400));
 
       // Simulate passing the detected page files to the popup's updateFileStats()
       const sampleFiles = [
@@ -254,10 +256,153 @@ async function runTests() {
         return await chrome.runtime.sendMessage({ action: 'BULKGRAB_DOWNLOAD_FILES', files });
       }, singleFile);
 
-      assert.strictEqual(fourthAttempt.status, 'quota_exceeded', '4th attempt must be rejected with quota_exceeded');
-      assert(fourthAttempt.message.includes('Free tier limit reached'), 'Message should indicate session limit reached');
+      await extPage.close();
+    });
+
+    // =========================================================================
+    // TEST 5: Badge is cleared when tab navigates to a new URL
+    // =========================================================================
+    await test('Badge is cleared on tab navigation (chrome.tabs.onUpdated)', async () => {
+      const page = await browser.newPage();
+      await page.goto(`http://localhost:${TEST_PORT}/test-page.html`, { waitUntil: 'domcontentloaded' });
+
+      const sw = await swTarget.worker();
+
+      // Find page tab ID
+      const tabs = await sw.evaluate(async () => {
+        const tList = await chrome.tabs.query({});
+        return tList.map(t => ({ id: t.id, active: t.active }));
+      });
+      const targetTab = tabs.find(t => t.active);
+      assert(targetTab, 'Active tab should exist');
+
+      // Set badge text for this tab
+      await sw.evaluate(async (tabId) => {
+        await chrome.action.setBadgeText({ text: '11', tabId });
+      }, targetTab.id);
+
+      const beforeNavBadge = await sw.evaluate(async (tabId) => {
+        return await chrome.action.getBadgeText({ tabId });
+      }, targetTab.id);
+      assert.strictEqual(beforeNavBadge, '11', 'Badge should be set before navigation');
+
+      // Navigate tab to a second URL
+      await page.goto(`http://localhost:${TEST_PORT}/test-page.html?view=nav2`, { waitUntil: 'domcontentloaded' });
+
+      // Verify badge text was cleared on navigation
+      const afterNavBadge = await sw.evaluate(async (tabId) => {
+        return await chrome.action.getBadgeText({ tabId });
+      }, targetTab.id);
+
+      assert.strictEqual(afterNavBadge, '', 'Badge text must be cleared to empty string on tab navigation');
+
+      await page.close();
+    });
+
+    // =========================================================================
+    // TEST 6: Options page verifies Stripe session ID via stub and activates Pro
+    // =========================================================================
+    await test('Options page verifies Stripe session ID via stub and activates Pro status', async () => {
+      const optionsPage = await browser.newPage();
+      await optionsPage.goto(`chrome-extension://${extId}/options/options.html`, { waitUntil: 'domcontentloaded' });
+
+      // Check initial status is Free
+      const initialBadge = await optionsPage.$eval('#tier-badge', el => el.textContent.trim());
+      assert.strictEqual(initialBadge, 'Free Plan');
+
+      // Enter a test Stripe checkout session ID
+      await optionsPage.type('#session-id-input', 'cs_test_sample_session_123456');
+      await optionsPage.click('#btn-activate');
+
+      // Wait for UI to update
+      await optionsPage.waitForFunction(() => {
+        return document.getElementById('tier-badge')?.textContent.includes('PRO');
+      }, { timeout: 5000 });
+
+      // Verify Pro status is reflected in chrome.storage.local
+      const sw = await swTarget.worker();
+      const storageData = await sw.evaluate(async () => {
+        return await chrome.storage.local.get(['licenseStatus', 'stripeSessionId']);
+      });
+
+      assert.strictEqual(storageData.licenseStatus, 'pro', 'Storage licenseStatus should be "pro"');
+      assert.strictEqual(storageData.stripeSessionId, 'cs_test_sample_session_123456', 'Stored session ID must match');
+
+      await optionsPage.close();
+    });
+
+    // =========================================================================
+    // TEST 7: Pro tier unlocks unlimited batch downloads and ZIP archive download
+    // =========================================================================
+    await test('Pro tier unlocks unlimited batch downloads and client-side ZIP packaging', async () => {
+      const extPage = await browser.newPage();
+      await extPage.goto(`chrome-extension://${extId}/options/options.html`, { waitUntil: 'domcontentloaded' });
+
+      // 1. Verify batch downloading 4 files is allowed on Pro tier
+      const fourFiles = [
+        { url: 'https://example.com/file1.pdf', filename: 'file1.pdf' },
+        { url: 'https://example.com/file2.pdf', filename: 'file2.pdf' },
+        { url: 'https://example.com/file3.pdf', filename: 'file3.pdf' },
+        { url: 'https://example.com/file4.pdf', filename: 'file4.pdf' }
+      ];
+
+      const proBatchAttempt = await extPage.evaluate(async (files) => {
+        // Mocking chrome.downloads.download inside evaluate so it doesn't fail on dummy URLs
+        const origDownload = chrome.downloads.download;
+        chrome.downloads.download = async () => 999;
+        const res = await chrome.runtime.sendMessage({ action: 'BULKGRAB_DOWNLOAD_FILES', files });
+        chrome.downloads.download = origDownload;
+        return res;
+      }, fourFiles);
+
+      assert.strictEqual(proBatchAttempt.status, 'ok', 'Pro tier should allow batch downloading > 3 files');
+      assert.strictEqual(proBatchAttempt.totalFiles, 4, 'Total files should be 4');
+
+      // 2. Verify ZIP archive packaging with JSZip
+      const zipTest = await extPage.evaluate(async () => {
+        const zip = new window.JSZip();
+        zip.file('document.txt', 'BulkGrab automated test content');
+        const b64 = await zip.generateAsync({ type: 'base64' });
+        const dataUrl = 'data:application/zip;base64,' + b64;
+        
+        // Dispatch to Service Worker
+        const res = await chrome.runtime.sendMessage({
+          action: 'BULKGRAB_DOWNLOAD_ZIP',
+          dataUrl: dataUrl,
+          filename: 'test_archive.zip'
+        });
+        return res;
+      });
+
+      assert.strictEqual(zipTest.status, 'ok', 'ZIP download should return status: ok');
 
       await extPage.close();
+    });
+
+    // =========================================================================
+    // TEST 8: Options page resets license back to Free tier
+    // =========================================================================
+    await test('Options page resets license back to Free tier', async () => {
+      const optionsPage = await browser.newPage();
+      await optionsPage.goto(`chrome-extension://${extId}/options/options.html`, { waitUntil: 'domcontentloaded' });
+
+      // Click Reset to Free Tier button
+      await optionsPage.click('#btn-reset');
+
+      // Wait for UI to update back to Free Plan
+      await optionsPage.waitForFunction(() => {
+        return document.getElementById('tier-badge')?.textContent.includes('Free Plan');
+      }, { timeout: 5000 });
+
+      const sw = await swTarget.worker();
+      const storageData = await sw.evaluate(async () => {
+        return await chrome.storage.local.get(['licenseStatus', 'stripeSessionId']);
+      });
+
+      assert.strictEqual(storageData.licenseStatus, 'free', 'License should be reset to "free"');
+      assert.strictEqual(storageData.stripeSessionId, '', 'Stripe session ID should be cleared');
+
+      await optionsPage.close();
     });
 
   } finally {

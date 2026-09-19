@@ -142,7 +142,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       await chrome.scripting.executeScript({
         target: { tabId: activeTab.id },
-        files: ['content/content-script.js']
+        files: ['assets/vendor/jszip.min.js', 'content/content-script.js']
       });
 
       // Brief delay for initialization

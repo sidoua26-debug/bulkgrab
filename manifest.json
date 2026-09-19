@@ -52,7 +52,8 @@
       "resources": [
         "content/content-style.css",
         "utils/constants.js",
-        "assets/icons/*"
+        "assets/icons/*",
+        "assets/vendor/jszip.min.js"
       ],
       "matches": ["http://*/*", "https://*/*"]
     }

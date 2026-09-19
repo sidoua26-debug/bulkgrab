@@ -339,6 +339,9 @@
             <button id="btn-download" class="btn-download" ${selectedCount === 0 ? 'disabled' : ''}>
               <span>⬇ Download Selected (${selectedCount})</span>
             </button>
+            <button id="btn-zip" class="${isPro ? 'btn-zip' : 'btn-zip btn-zip-locked'}" ${selectedCount === 0 ? 'disabled' : ''} title="${isPro ? 'Package selected files as a ZIP archive' : 'Pro Feature: Download as ZIP'}">
+              <span>${isPro ? '📦 ZIP' : '🔒 ZIP (PRO)'}</span>
+            </button>
           </div>
         </div>
       </div>
@@ -404,6 +407,9 @@
 
     // Download button
     shadowRoot.getElementById('btn-download')?.addEventListener('click', startDownloads);
+
+    // ZIP button (Pro)
+    shadowRoot.getElementById('btn-zip')?.addEventListener('click', startZipDownload);
   }
 
   function renderFileListOnly() {
@@ -462,6 +468,11 @@
     if (downloadBtn) {
       downloadBtn.disabled = selectedUrls.size === 0;
       downloadBtn.innerHTML = `<span>⬇ Download Selected (${selectedUrls.size})</span>`;
+    }
+
+    const zipBtn = shadowRoot.getElementById('btn-zip');
+    if (zipBtn) {
+      zipBtn.disabled = selectedUrls.size === 0;
     }
 
     // Update item highlights
@@ -564,6 +575,99 @@
       if (downloadBtn) {
         downloadBtn.disabled = false;
         downloadBtn.innerHTML = `<span>⬇ Download Selected (${selectedUrls.size})</span>`;
+      }
+    }
+  }
+
+  /**
+   * Package selected files client-side into a ZIP archive using JSZip (Pro Feature).
+   */
+  async function startZipDownload() {
+    if (selectedUrls.size === 0) return;
+
+    if (licenseStatus !== 'pro') {
+      showStatus(
+        '⭐ <strong>Download as ZIP is a PRO feature!</strong> Upgrade to Pro to bundle unlimited files into a clean ZIP archive, or use standard download.',
+        'warning'
+      );
+      return;
+    }
+
+    const filesToDownload = detectedFiles.filter(f => selectedUrls.has(f.url));
+    const zipBtn = shadowRoot.getElementById('btn-zip');
+    const downloadBtn = shadowRoot.getElementById('btn-download');
+
+    if (zipBtn) {
+      zipBtn.disabled = true;
+      zipBtn.innerHTML = '<span>📦 Zipping...</span>';
+    }
+    if (downloadBtn) {
+      downloadBtn.disabled = true;
+    }
+
+    showStatus(`Preparing ZIP archive for ${filesToDownload.length} file(s)...`, 'info');
+    setProgress(0, filesToDownload.length);
+
+    try {
+      const JSZipLib = window.JSZip;
+      if (!JSZipLib) {
+        throw new Error('JSZip library is not loaded. Please re-open the grabber panel.');
+      }
+
+      const zip = new JSZipLib();
+      let packagedCount = 0;
+
+      for (let i = 0; i < filesToDownload.length; i++) {
+        const file = filesToDownload[i];
+        showStatus(`Adding (${i + 1}/${filesToDownload.length}): ${escapeHtml(file.filename)}...`, 'info');
+        setProgress(i, filesToDownload.length);
+
+        try {
+          const res = await fetch(file.url, { credentials: 'include' });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const buffer = await res.arrayBuffer();
+          zip.file(file.filename, buffer);
+          packagedCount++;
+        } catch (fetchErr) {
+          console.warn(`[BulkGrab ZIP] Could not fetch ${file.url}:`, fetchErr);
+        }
+      }
+
+      if (packagedCount === 0) {
+        throw new Error('None of the selected files could be retrieved for the archive.');
+      }
+
+      showStatus('Compressing ZIP archive...', 'info');
+      setProgress(filesToDownload.length, filesToDownload.length);
+
+      const base64Data = await zip.generateAsync({ type: 'base64' });
+      const dataUrl = 'data:application/zip;base64,' + base64Data;
+
+      const hostname = window.location.hostname || 'BulkGrab';
+      const cleanHost = hostname.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const zipFilename = `${cleanHost}_Archive.zip`;
+
+      const response = await chrome.runtime.sendMessage({
+        action: 'BULKGRAB_DOWNLOAD_ZIP',
+        dataUrl: dataUrl,
+        filename: zipFilename
+      });
+
+      if (response && response.status === 'ok') {
+        showStatus(`✅ ZIP archive (${packagedCount} files) saved as ${escapeHtml(zipFilename)}!`, 'info');
+        setTimeout(hideStatus, 6000);
+      } else {
+        showStatus(`❌ ZIP download error: ${escapeHtml(response?.message || 'Download failed')}`, 'error');
+      }
+    } catch (err) {
+      showStatus(`❌ ZIP packaging error: ${escapeHtml(err.message)}`, 'error');
+    } finally {
+      if (zipBtn) {
+        zipBtn.disabled = selectedUrls.size === 0;
+        zipBtn.innerHTML = `<span>📦 ZIP</span>`;
+      }
+      if (downloadBtn) {
+        downloadBtn.disabled = selectedUrls.size === 0;
       }
     }
   }

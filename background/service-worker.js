@@ -1,6 +1,6 @@
 /**
  * BulkGrab - Service Worker (Background)
- * Manages chrome.downloads, license status, and session download quotas.
+ * Manages chrome.downloads, license status, licensing verification stub, and session download quotas.
  */
 
 import { STORAGE_KEYS, MESSAGE_ACTIONS, FREE_DOWNLOAD_LIMIT } from '../utils/constants.js';
@@ -28,8 +28,85 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 });
 
 /**
+ * Clear badge on tab navigation.
+ * Per minimal-permissions design, badge is cleared when page begins loading
+ * and is repopulated only upon user action/popup inspection.
+ */
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === 'loading') {
+    chrome.action.setBadgeText({ text: '', tabId });
+  }
+});
+
+/**
+ * STUB: Verify Stripe Checkout Session ID.
+ * Currently accepts any non-empty string and activates 'pro' status.
+ * 
+ * =========================================================================
+ * HOW TO CONNECT TO A REAL CLOUDFLARE WORKER:
+ * =========================================================================
+ * Replace the mock storage update below with a live fetch to your Cloudflare Worker:
+ * 
+ * try {
+ *   const response = await fetch(`https://your-worker.workers.dev/api/verify-license?session_id=${encodeURIComponent(sessionId)}`, {
+ *     method: 'GET',
+ *     headers: { 'Accept': 'application/json' }
+ *   });
+ *   if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`);
+ *   const data = await response.json();
+ *   if (!data.valid) {
+ *     return { valid: false, error: data.message || 'Invalid or unverified Stripe session ID.' };
+ *   }
+ *   await chrome.storage.local.set({
+ *     [STORAGE_KEYS.LICENSE_STATUS]: 'pro',
+ *     [STORAGE_KEYS.STRIPE_SESSION_ID]: sessionId.trim()
+ *   });
+ *   return { valid: true, status: 'pro', sessionId: sessionId.trim(), message: 'Pro license verified!' };
+ * } catch (err) {
+ *   return { valid: false, error: `Verification failed: ${err.message}` };
+ * }
+ * =========================================================================
+ */
+export async function verifyLicense(sessionId) {
+  if (!sessionId || typeof sessionId !== 'string' || !sessionId.trim()) {
+    return {
+      valid: false,
+      error: 'Please enter a valid Stripe Checkout session ID (e.g. cs_test_...).'
+    };
+  }
+
+  const trimmed = sessionId.trim();
+
+  // Stub behavior: accept any non-empty session ID string
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.LICENSE_STATUS]: 'pro',
+    [STORAGE_KEYS.STRIPE_SESSION_ID]: trimmed
+  });
+
+  console.log(`[BulkGrab Service Worker] Stub license verified. Pro tier activated for session: ${trimmed}`);
+
+  return {
+    valid: true,
+    status: 'pro',
+    sessionId: trimmed,
+    message: 'Pro license activated successfully! Unlimited downloads and ZIP bundling unlocked.'
+  };
+}
+
+/**
+ * Reset license back to Free tier (for testing and tier switching).
+ */
+export async function resetLicense() {
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.LICENSE_STATUS]: 'free',
+    [STORAGE_KEYS.STRIPE_SESSION_ID]: ''
+  });
+  console.log('[BulkGrab Service Worker] License status reset to free.');
+  return { valid: true, status: 'free', message: 'License reset to Free tier.' };
+}
+
+/**
  * Wait for a specific chrome.downloads download to finish or error.
- * Free tier downloads one by one sequentially.
  */
 function waitForDownloadCompletion(downloadId, timeoutMs = 60000) {
   return new Promise((resolve, reject) => {
@@ -56,7 +133,6 @@ function waitForDownloadCompletion(downloadId, timeoutMs = 60000) {
 
     timer = setTimeout(() => {
       cleanup();
-      // On timeout, assume file is progressing in browser download manager
       resolve({ downloadId, success: true, timedOut: true });
     }, timeoutMs);
   });
@@ -107,7 +183,7 @@ async function handleDownloadFiles(files, senderTabId) {
     }
   }
 
-  // 3. Sequential Download Execution (one by one)
+  // 3. Download Execution
   const results = [];
   let successfulCount = 0;
 
@@ -140,6 +216,7 @@ async function handleDownloadFiles(files, senderTabId) {
 
       console.log(`[BulkGrab] Initiated download ${currentIndex}/${files.length}: id=${downloadId}, file=${sanitizedFilename}`);
       
+      // Free tier waits sequentially; Pro tier also proceeds smoothly
       await waitForDownloadCompletion(downloadId);
 
       successfulCount++;
@@ -192,6 +269,41 @@ async function handleDownloadFiles(files, senderTabId) {
   };
 }
 
+/**
+ * Handle client-side bundled ZIP archive download.
+ */
+async function handleDownloadZip(dataUrl, filename = 'BulkGrab_Archive.zip') {
+  if (!dataUrl || !dataUrl.startsWith('data:application/zip;base64,')) {
+    return { status: 'error', message: 'Invalid ZIP data URL payload.' };
+  }
+
+  // Check license
+  const localData = await chrome.storage.local.get(STORAGE_KEYS.LICENSE_STATUS);
+  const isPro = localData[STORAGE_KEYS.LICENSE_STATUS] === 'pro';
+
+  if (!isPro) {
+    return {
+      status: 'pro_required',
+      message: 'Download as ZIP is a Pro feature. Upgrade to Pro to unlock ZIP bundling.'
+    };
+  }
+
+  try {
+    const downloadId = await chrome.downloads.download({
+      url: dataUrl,
+      filename: filename,
+      conflictAction: 'uniquify',
+      saveAs: false
+    });
+
+    console.log(`[BulkGrab] ZIP Archive download initiated: id=${downloadId}, file=${filename}`);
+    return { status: 'ok', downloadId, filename };
+  } catch (err) {
+    console.error('[BulkGrab] ZIP download failed:', err);
+    return { status: 'error', message: err.message };
+  }
+}
+
 // Runtime message dispatcher
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !message.action) return false;
@@ -222,7 +334,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // 2. Download files request
+  // 2. Verify license stub
+  if (message.action === MESSAGE_ACTIONS.VERIFY_LICENSE) {
+    (async () => {
+      const result = await verifyLicense(message.sessionId);
+      sendResponse(result);
+    })();
+    return true;
+  }
+
+  // 3. Reset license (for testing)
+  if (message.action === MESSAGE_ACTIONS.RESET_LICENSE) {
+    (async () => {
+      const result = await resetLicense();
+      sendResponse(result);
+    })();
+    return true;
+  }
+
+  // 4. Download files request
   if (message.action === MESSAGE_ACTIONS.DOWNLOAD_FILES) {
     (async () => {
       try {
@@ -236,7 +366,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // 3. Reset session quota (for testing)
+  // 5. Download ZIP request
+  if (message.action === MESSAGE_ACTIONS.DOWNLOAD_ZIP) {
+    (async () => {
+      const result = await handleDownloadZip(message.dataUrl, message.filename);
+      sendResponse(result);
+    })();
+    return true;
+  }
+
+  // 6. Reset session quota (for testing)
   if (message.action === MESSAGE_ACTIONS.RESET_SESSION_QUOTA) {
     (async () => {
       if (chrome.storage.session) {
@@ -247,7 +386,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // 4. Update tab action badge count
+  // 7. Update tab action badge count
   if (message.action === MESSAGE_ACTIONS.UPDATE_BADGE && tabId) {
     const count = Number(message.count) || 0;
     chrome.action.setBadgeText({
