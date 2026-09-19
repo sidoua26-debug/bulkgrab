@@ -17,22 +17,49 @@
           <span id="tier-badge" class="badge badge-free">Free Plan</span>
         </div>
       </div>
-      <a href="#" id="btn-options" class="icon-btn" title="Options & License">⚙️</a>
+      <button id="btn-options" class="icon-btn" title="Settings & Licensing">⚙️</button>
     </header>
 
-    <!-- Main Stats / Status Card -->
-    <section class="card status-card">
-      <div class="stat-row">
-        <span class="stat-label">Detected Files:</span>
-        <span id="file-count" class="stat-value">Scanning...</span>
+    <!-- Context / Active Page Bar -->
+    <div class="context-bar">
+      <div class="domain-info" title="Current tab">
+        <span class="pulse-dot"></span>
+        <span id="active-domain" class="domain-text">Detecting page...</span>
       </div>
-      <div class="stat-row">
-        <span class="stat-label">Session Downloads:</span>
-        <span id="download-quota" class="stat-value">0 / 3 used</span>
+      <button id="btn-rescan" class="rescan-btn" title="Rescan files on this page">
+        <span>🔄 Rescan</span>
+      </button>
+    </div>
+
+    <!-- Main Stats Card -->
+    <section class="card stats-card">
+      <div class="hero-stat">
+        <span id="file-count" class="hero-number">0</span>
+        <span class="hero-label">Downloadable Files Found</span>
+      </div>
+      
+      <!-- Category breakdown pills -->
+      <div class="category-breakdown" id="category-pills">
+        <span class="cat-pill" id="cat-docs" title="Documents">📄 0 Docs</span>
+        <span class="cat-pill" id="cat-images" title="Images">🖼️ 0 Images</span>
+        <span class="cat-pill" id="cat-archives" title="Archives">📦 0 Archives</span>
+        <span class="cat-pill" id="cat-media" title="Media">🎵 0 Media</span>
       </div>
     </section>
 
-    <!-- Action Buttons -->
+    <!-- Quota / Plan Status Card -->
+    <section class="card quota-card" id="quota-section">
+      <div class="quota-header">
+        <span class="quota-title" id="quota-title">Session Downloads Quota</span>
+        <span id="download-quota" class="quota-counter">0 / 3 used</span>
+      </div>
+      <div class="quota-track" id="quota-track-container">
+        <div id="quota-fill" class="quota-fill" style="width: 0%;"></div>
+      </div>
+      <p id="quota-note" class="quota-note">Free tier allows 3 sequential downloads per session.</p>
+    </section>
+
+    <!-- Actions Section -->
     <section class="actions">
       <button id="btn-toggle-panel" class="btn btn-primary">
         <span>📂 Open Grabber Panel</span>
@@ -46,6 +73,8 @@
     <!-- Footer -->
     <footer class="footer">
       <span>BulkGrab v1.0.0</span>
+      <span class="bullet">•</span>
+      <a href="#" id="link-options" class="footer-link">Options</a>
     </footer>
   </div>
 

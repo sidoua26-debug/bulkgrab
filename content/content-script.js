@@ -169,6 +169,9 @@
 
     detectedFiles = Array.from(fileMap.values());
     console.log(`[BulkGrab] Scanned ${detectedFiles.length} downloadable files on this page.`);
+    try {
+      chrome.runtime.sendMessage({ action: 'BULKGRAB_UPDATE_BADGE', count: detectedFiles.length });
+    } catch (_) {}
     return detectedFiles;
   }
 
@@ -606,6 +609,12 @@
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message || !message.action) return false;
 
+        if (message.action === 'BULKGRAB_RESCAN') {
+      scanDOMForFiles();
+      renderUI();
+      sendResponse({ status: 'ok', count: detectedFiles.length, files: detectedFiles });
+      return false;
+    }
     if (message.action === 'BULKGRAB_PING') {
       sendResponse({ status: 'alive', fileCount: detectedFiles.length });
       return false;

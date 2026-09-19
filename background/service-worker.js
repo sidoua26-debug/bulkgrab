@@ -56,7 +56,7 @@ function waitForDownloadCompletion(downloadId, timeoutMs = 60000) {
 
     timer = setTimeout(() => {
       cleanup();
-      // On timeout, we assume file is downloading in background
+      // On timeout, assume file is progressing in browser download manager
       resolve({ downloadId, success: true, timedOut: true });
     }, timeoutMs);
   });
@@ -125,13 +125,10 @@ async function handleDownloadFiles(files, senderTabId) {
           filename: file.filename,
           state: 'downloading'
         });
-      } catch (err) {
-        // Tab may have closed or not listening, ignore
-      }
+      } catch (_) {}
     }
 
     try {
-      // Clean filename for safety
       const sanitizedFilename = (file.filename || 'download').replace(/[/\\?%*:|"<>]/g, '_');
       
       const downloadId = await chrome.downloads.download({
@@ -143,7 +140,6 @@ async function handleDownloadFiles(files, senderTabId) {
 
       console.log(`[BulkGrab] Initiated download ${currentIndex}/${files.length}: id=${downloadId}, file=${sanitizedFilename}`);
       
-      // Wait for sequential completion before next file
       await waitForDownloadCompletion(downloadId);
 
       successfulCount++;
@@ -156,7 +152,6 @@ async function handleDownloadFiles(files, senderTabId) {
 
       results.push({ filename: file.filename, success: true, downloadId });
 
-      // Notify progress update
       if (senderTabId) {
         try {
           await chrome.tabs.sendMessage(senderTabId, {
@@ -241,7 +236,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // 3. Reset session quota (for testing or new sessions)
+  // 3. Reset session quota (for testing)
   if (message.action === MESSAGE_ACTIONS.RESET_SESSION_QUOTA) {
     (async () => {
       if (chrome.storage.session) {
@@ -250,6 +245,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ status: 'ok', sessionDownloads: 0 });
     })();
     return true;
+  }
+
+  // 4. Update tab action badge count
+  if (message.action === MESSAGE_ACTIONS.UPDATE_BADGE && tabId) {
+    const count = Number(message.count) || 0;
+    chrome.action.setBadgeText({
+      text: count > 0 ? String(count) : '',
+      tabId: tabId
+    });
+    chrome.action.setBadgeBackgroundColor({
+      color: '#4F46E5',
+      tabId: tabId
+    });
+    sendResponse({ status: 'ok' });
+    return false;
   }
 
   return false;
