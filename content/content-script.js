@@ -11,6 +11,29 @@
   }
   window.__BULKGRAB_INITIALIZED__ = true;
 
+  // Security Helper: Escape HTML special characters to prevent XSS / template injection
+  function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Security Helper: Validate and sanitize URL protocols
+  function sanitizeUrl(url) {
+    if (!url || typeof url !== 'string') return '#';
+    try {
+      const parsed = new URL(url, document.baseURI);
+      if (['http:', 'https:', 'file:'].includes(parsed.protocol)) {
+        return escapeHtml(parsed.href);
+      }
+    } catch (_) {}
+    return '#';
+  }
+
   // Configurable file extensions
   const DEFAULT_EXTENSIONS = [
     // Documents
@@ -195,7 +218,7 @@
     if (!isPanelVisible) {
       container.innerHTML = `
         <button id="btn-reopen-launcher" class="bulkgrab-launcher" title="Open BulkGrab Panel">
-          <img src="${chrome.runtime.getURL('assets/icons/icon-16.png')}" style="width:16px;height:16px;" />
+          <img src="${chrome.runtime.getURL('assets/icons/icon-16.png')}" style="width:16px;height:16px;" alt="" />
           <span>BulkGrab (${detectedFiles.length})</span>
         </button>
       `;
@@ -259,7 +282,7 @@
 
           <!-- Search & Select All Bar -->
           <div class="toolbar">
-            <input type="text" class="search-input" id="search-input" placeholder="Filter by name..." value="${searchQuery}" />
+            <input type="text" class="search-input" id="search-input" placeholder="Filter by name..." value="${escapeHtml(searchQuery)}" />
             <label class="selection-toggle">
               <input type="checkbox" id="checkbox-select-all" ${isAllSelected ? 'checked' : ''} />
               <span>Select All</span>
@@ -270,18 +293,23 @@
           <div class="file-list" id="file-list-container">
             ${filtered.length === 0 ? `
               <div class="empty-state">No downloadable files matching your filter.</div>
-            ` : filtered.map((file, idx) => {
+            ` : filtered.map((file) => {
               const isSelected = selectedUrls.has(file.url);
               const badgeClass = 'ext-' + (file.category === 'documents' ? 'doc' : file.category === 'images' ? 'img' : file.category === 'archives' ? 'zip' : file.category === 'media' ? 'media' : 'other');
+              const safeUrl = sanitizeUrl(file.url);
+              const safeFilename = escapeHtml(file.filename);
+              const safeOrigin = escapeHtml(file.origin);
+              const safeExt = escapeHtml(file.ext);
+
               return `
-                <div class="file-item ${isSelected ? 'selected' : ''}" data-url="${file.url}">
-                  <input type="checkbox" class="file-checkbox" data-url="${file.url}" ${isSelected ? 'checked' : ''} />
-                  <span class="ext-badge ${badgeClass}">${file.ext}</span>
+                <div class="file-item ${isSelected ? 'selected' : ''}" data-url="${safeUrl}">
+                  <input type="checkbox" class="file-checkbox" data-url="${safeUrl}" ${isSelected ? 'checked' : ''} />
+                  <span class="ext-badge ${badgeClass}">${safeExt}</span>
                   <div class="file-details">
-                    <span class="file-name" title="${file.filename}">${file.filename}</span>
-                    <span class="file-sub">${file.origin}</span>
+                    <span class="file-name" title="${safeFilename}">${safeFilename}</span>
+                    <span class="file-sub">${safeOrigin}</span>
                   </div>
-                  <a href="${file.url}" target="_blank" rel="noopener noreferrer" class="file-link" title="Open file in new tab">↗</a>
+                  <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="file-link" title="Open file in new tab">↗</a>
                 </div>
               `;
             }).join('')}
@@ -385,15 +413,20 @@
     listContainer.innerHTML = filtered.map(file => {
       const isSelected = selectedUrls.has(file.url);
       const badgeClass = 'ext-' + (file.category === 'documents' ? 'doc' : file.category === 'images' ? 'img' : file.category === 'archives' ? 'zip' : file.category === 'media' ? 'media' : 'other');
+      const safeUrl = sanitizeUrl(file.url);
+      const safeFilename = escapeHtml(file.filename);
+      const safeOrigin = escapeHtml(file.origin);
+      const safeExt = escapeHtml(file.ext);
+
       return `
-        <div class="file-item ${isSelected ? 'selected' : ''}" data-url="${file.url}">
-          <input type="checkbox" class="file-checkbox" data-url="${file.url}" ${isSelected ? 'checked' : ''} />
-          <span class="ext-badge ${badgeClass}">${file.ext}</span>
+        <div class="file-item ${isSelected ? 'selected' : ''}" data-url="${safeUrl}">
+          <input type="checkbox" class="file-checkbox" data-url="${safeUrl}" ${isSelected ? 'checked' : ''} />
+          <span class="ext-badge ${badgeClass}">${safeExt}</span>
           <div class="file-details">
-            <span class="file-name" title="${file.filename}">${file.filename}</span>
-            <span class="file-sub">${file.origin}</span>
+            <span class="file-name" title="${safeFilename}">${safeFilename}</span>
+            <span class="file-sub">${safeOrigin}</span>
           </div>
-          <a href="${file.url}" target="_blank" rel="noopener noreferrer" class="file-link" title="Open in new tab">↗</a>
+          <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="file-link" title="Open in new tab">↗</a>
         </div>
       `;
     }).join('');
@@ -510,12 +543,12 @@
         showStatus(`✅ Successfully downloaded ${response.downloadedCount} file(s)!`, 'info');
         setTimeout(hideStatus, 5000);
       } else if (response && response.status === 'quota_exceeded') {
-        showStatus(`❌ ${response.message}`, 'error');
+        showStatus(`❌ ${escapeHtml(response.message)}`, 'error');
       } else {
-        showStatus(`❌ Error: ${response?.message || 'Download failed'}`, 'error');
+        showStatus(`❌ Error: ${escapeHtml(response?.message || 'Download failed')}`, 'error');
       }
     } catch (err) {
-      showStatus(`❌ Download error: ${err.message}`, 'error');
+      showStatus(`❌ Download error: ${escapeHtml(err.message)}`, 'error');
     } finally {
       if (downloadBtn) {
         downloadBtn.disabled = false;
@@ -595,13 +628,14 @@
     }
 
     if (message.action === 'BULKGRAB_DOWNLOAD_PROGRESS') {
+      const safeFilename = escapeHtml(message.filename);
       if (message.state === 'downloading') {
-        showStatus(`Downloading (${message.index}/${message.total}): ${message.filename}...`, 'info');
+        showStatus(`Downloading (${message.index}/${message.total}): ${safeFilename}...`, 'info');
         setProgress(message.index - 1, message.total);
       } else if (message.state === 'completed') {
         setProgress(message.index, message.total);
       } else if (message.state === 'failed') {
-        showStatus(`⚠️ Failed to download: ${message.filename}`, 'warning');
+        showStatus(`⚠️ Failed to download: ${safeFilename}`, 'warning');
       }
       return false;
     }

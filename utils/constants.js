@@ -2,6 +2,23 @@
  * BulkGrab - Constants and Configuration
  */
 
+/**
+ * QUOTA STRATEGY DECISION & ARCHITECTURE:
+ * 
+ * Free-tier download quota is configured to reset per browser session (whenever the
+ * browser is closed and reopened), strictly adhering to the "per session" freemium spec.
+ * 
+ * State storage: chrome.storage.session
+ * - Automatically cleaned up when the browser session terminates.
+ * - Survives service worker idle suspensions without state loss.
+ * 
+ * To switch to a Calendar-Day / Daily Quota in the future:
+ * 1. Move quota storage to `chrome.storage.local`.
+ * 2. Save an ISO date key (e.g. `downloadQuotaDate = 'YYYY-MM-DD'`).
+ * 3. In service-worker.js, compare today's date with the stored date and reset count if different.
+ */
+export const QUOTA_POLICY = 'SESSION'; // 'SESSION' | 'DAILY'
+
 // Supported file extensions scanned by default on webpages.
 // Easily configurable to add or remove specific extensions.
 export const DEFAULT_FILE_EXTENSIONS = [
@@ -36,7 +53,7 @@ export const FREE_DOWNLOAD_LIMIT = 3;
 // Storage keys for chrome.storage
 export const STORAGE_KEYS = {
   LICENSE_STATUS: 'licenseStatus',           // 'free' | 'pro'
-  SESSION_DOWNLOADS: 'sessionDownloadCount', // integer
+  SESSION_DOWNLOADS: 'sessionDownloadCount', // integer (stored in chrome.storage.session)
   STRIPE_SESSION_ID: 'stripeSessionId',      // string
 };
 

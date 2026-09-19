@@ -1,6 +1,6 @@
 /**
  * BulkGrab - Popup Script
- * Connects with Service Worker for license/quota and Content Script for file stats.
+ * Connects with Service Worker for license/quota and Content Script for live tab file stats.
  */
 
 import { MESSAGE_ACTIONS, STRIPE_PAYMENT_URL, FREE_DOWNLOAD_LIMIT } from '../utils/constants.js';
@@ -50,57 +50,76 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 2. Query active tab for detected downloadable files
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   
-  if (!activeTab || !activeTab.id || !activeTab.url || activeTab.url.startsWith('chrome://') || activeTab.url.startsWith('edge://')) {
+  // Guard against non-scriptable URLs
+  if (
+    !activeTab || 
+    !activeTab.id || 
+    !activeTab.url || 
+    activeTab.url.startsWith('chrome://') || 
+    activeTab.url.startsWith('chrome-extension://') || 
+    activeTab.url.startsWith('devtools://') || 
+    activeTab.url.startsWith('edge://') ||
+    activeTab.url.includes('chromewebstore.google.com')
+  ) {
     fileCountEl.textContent = 'Unavailable on system page';
-    if (btnTogglePanel) btnTogglePanel.disabled = true;
+    if (btnTogglePanel) {
+      btnTogglePanel.disabled = true;
+      btnTogglePanel.title = 'BulkGrab cannot run on browser system pages or Chrome Web Store';
+    }
     return;
   }
 
-  // Helper to ensure content script is injected
+  // Helper to ensure content script is injected using activeTab permission
   async function ensureContentScriptInjected() {
     try {
-      // Test if already responding
+      // 1. Test if content script is already answering
       const ping = await chrome.tabs.sendMessage(activeTab.id, { action: MESSAGE_ACTIONS.PING });
-      if (ping && ping.status === 'alive') return true;
+      if (ping && ping.status === 'alive') {
+        return { success: true, count: ping.fileCount };
+      }
     } catch (_) {
-      // Not yet injected, inject via scripting API
+      // Not yet injected or page was loaded before extension was loaded
     }
 
     try {
+      // 2. Dynamically inject via scripting API granted by activeTab user gesture
       await chrome.scripting.executeScript({
         target: { tabId: activeTab.id },
         files: ['content/content-script.js']
       });
-      return true;
+
+      // Allow a brief moment for DOM scan & Shadow DOM mount
+      await new Promise(r => setTimeout(r, 100));
+
+      const pageInfo = await chrome.tabs.sendMessage(activeTab.id, { action: MESSAGE_ACTIONS.GET_PAGE_FILES });
+      return { success: true, count: pageInfo?.count || 0 };
     } catch (err) {
       console.warn('[BulkGrab Popup] Could not inject content script:', err);
-      return false;
+      return { success: false, error: err.message };
     }
   }
 
-  const injected = await ensureContentScriptInjected();
-  if (injected) {
-    try {
-      const pageInfo = await chrome.tabs.sendMessage(activeTab.id, { action: MESSAGE_ACTIONS.GET_PAGE_FILES });
-      if (pageInfo && pageInfo.status === 'ok') {
-        const count = pageInfo.count || 0;
-        fileCountEl.textContent = `${count} file${count === 1 ? '' : 's'} found`;
-      }
-    } catch (err) {
-      fileCountEl.textContent = 'Detected on page';
-    }
+  const result = await ensureContentScriptInjected();
+  if (result.success) {
+    const count = result.count || 0;
+    fileCountEl.textContent = `${count} file${count === 1 ? '' : 's'} found`;
   } else {
-    fileCountEl.textContent = 'Ready on user tabs';
+    fileCountEl.textContent = 'Cannot scan this page';
+    if (btnTogglePanel) btnTogglePanel.disabled = true;
   }
 
   // 3. Toggle/Open panel on active tab
   btnTogglePanel?.addEventListener('click', async () => {
     try {
-      await ensureContentScriptInjected();
-      await chrome.tabs.sendMessage(activeTab.id, { action: MESSAGE_ACTIONS.TOGGLE_PANEL });
-      window.close(); // Close popup so user sees the page panel
+      btnTogglePanel.disabled = true;
+      const inj = await ensureContentScriptInjected();
+      if (inj.success) {
+        await chrome.tabs.sendMessage(activeTab.id, { action: MESSAGE_ACTIONS.TOGGLE_PANEL });
+        window.close(); // Close popup once panel is open
+      }
     } catch (err) {
       console.error('[BulkGrab Popup] Failed to toggle panel:', err);
+      btnTogglePanel.disabled = false;
     }
   });
 });
