@@ -1204,6 +1204,64 @@ async function runTests() {
       await optionsPage.close();
     });
 
+    // =========================================================================
+    // TEST 19: Cloudflare Worker GET /privacy returns mobile-friendly HTML policy
+    // =========================================================================
+    await test('Cloudflare Worker GET /privacy returns clean HTML with text/html content-type', async () => {
+      const { default: worker } = await import('../cloudflare-worker/worker.js');
+      const req = new Request('https://worker.local/privacy', { method: 'GET' });
+      const res = await worker.fetch(req, {});
+
+      assert.strictEqual(res.status, 200, 'GET /privacy must return HTTP 200');
+      assert.strictEqual(
+        res.headers.get('content-type'),
+        'text/html; charset=utf-8',
+        'GET /privacy must return Content-Type: text/html; charset=utf-8'
+      );
+
+      const html = await res.text();
+      assert(html.includes('BulkGrab Privacy Policy'), 'Must contain title BulkGrab Privacy Policy');
+      assert(html.includes('Last updated: September 20, 2026'), 'Must contain Last updated date');
+      assert(html.includes('1. What stays on your device.'), 'Must contain section 1');
+      assert(html.includes('2. What is sent to our server.'), 'Must contain section 2');
+      assert(html.includes('3. Payments.'), 'Must contain section 3');
+      assert(html.includes('4. Optional site access.'), 'Must contain section 4');
+      assert(html.includes('5. No selling, no ads.'), 'Must contain section 5');
+      assert(html.includes('6. Changes and contact.'), 'Must contain section 6');
+      assert(html.includes('sidoua26@gmail.com'), 'Must contain contact email sidoua26@gmail.com');
+    });
+
+    // =========================================================================
+    // TEST 20: Cloudflare Worker script must be 100% self-contained without imports
+    // =========================================================================
+    await test('worker.js is a self-contained single file with zero "import " statements or external references', async () => {
+      const workerPath = path.join(__dirname, '../cloudflare-worker/worker.js');
+      const workerSource = fs.readFileSync(workerPath, 'utf8');
+
+      // Check for any "import " statements
+      const hasImportStatement = /(?:^|\n)\s*import\s+/m.test(workerSource) || workerSource.includes('import ');
+      assert.strictEqual(
+        hasImportStatement,
+        false,
+        'cloudflare-worker/worker.js must not contain any "import " statements to prevent Cloudflare Dashboard 10021 errors'
+      );
+
+      // Check for any "require(" calls
+      const hasRequireCall = /(?:^|\n)\s*const\s+.*=\s*require\s*\(/m.test(workerSource) || workerSource.includes('require(');
+      assert.strictEqual(
+        hasRequireCall,
+        false,
+        'cloudflare-worker/worker.js must not contain any "require(" calls'
+      );
+
+      // Check for any references to external files outside cloudflare-worker/
+      assert.strictEqual(
+        workerSource.includes('../'),
+        false,
+        'cloudflare-worker/worker.js must not contain relative paths ("../") referencing files outside cloudflare-worker/'
+      );
+    });
+
   } finally {
     if (browser) await browser.close();
     if (server) server.close();

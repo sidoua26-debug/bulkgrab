@@ -16,9 +16,12 @@
   • Client-Side ZIP Packaging: Bundle multiple files into a single organized ZIP archive directly inside your browser.
   • Privacy First: All scanning and file bundling happens locally on your device.
 
+  Pro is a one-time $9.99 payment made in USDT (BSC network) through NOWPayments.
+
 - **Category**: Productivity / Tools
 - **Version**: 1.0.0
-- **Support Contact / URL**: support@bulkgrab.example.com
+- **Support Contact / URL**: sidoua26@gmail.com
+- **Privacy Policy URL**: https://bulkgrab-licensing.sidoua26.workers.dev/privacy
 
 ---
 
@@ -63,6 +66,7 @@ Chrome Web Store requires a plain-English explanation for every requested permis
   - [ ] Screenshot of options/licensing interface.
 - [ ] **Privacy Policy & Single Purpose**:
   - **Single Purpose**: BulkGrab provides in-page detection and streamlined downloading of downloadable files and media.
-  - **Data Transmission**: BulkGrab does not collect, track, or transmit user data, browsing history, or webpage contents to external servers. All file scanning, selection, and archive bundling execute entirely locally on the user's device.
+  - **Data Transmission**: BulkGrab scans pages and bundles files locally. It sends only a payment reference to our licensing server when you activate Pro; see the privacy policy.
+  - **Privacy Policy URL**: https://bulkgrab-licensing.sidoua26.workers.dev/privacy
   - **Licensing Verification**: When a user activates a Pro tier license, only the user-submitted NOWPayments Payment ID is sent to the verification backend to validate purchase status on the blockchain. No personal data or browsing details are transmitted.
 

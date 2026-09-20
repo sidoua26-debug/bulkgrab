@@ -10,7 +10,8 @@
  * - NOWPAYMENTS_IPN_KEY: Your private NOWPayments IPN secret key (from dashboard)
  */
 
-import { SUPPORT_EMAIL } from '../utils/constants.js';
+// Customer support contact email (defined locally so worker.js is a 100% self-contained file)
+const SUPPORT_EMAIL = 'sidoua26@gmail.com';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -69,6 +70,113 @@ async function verifyHmacSignature(rawBody, signature, secretKey) {
   }
 }
 
+/**
+ * Returns simple, clean, mobile-friendly HTML for the Privacy Policy
+ */
+function getPrivacyHtml() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BulkGrab Privacy Policy</title>
+  <style>
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --text-main: #1e293b;
+      --text-muted: #64748b;
+      --bg-page: #f8fafc;
+      --bg-card: #ffffff;
+      --accent: #4f46e5;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      line-height: 1.6;
+      padding: 36px 16px;
+    }
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+      background: var(--bg-card);
+      padding: 36px 30px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 6px;
+    }
+    .date {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    ol {
+      list-style-position: inside;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    li {
+      font-size: 15px;
+      color: var(--text-main);
+    }
+    li strong {
+      color: #0f172a;
+    }
+    a {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+    a:hover {
+      color: #4338ca;
+    }
+    @media (max-width: 480px) {
+      body { padding: 16px 10px; }
+      .container { padding: 24px 18px; }
+      h1 { font-size: 20px; }
+      li { font-size: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>BulkGrab Privacy Policy</h1>
+    <p class="date">Last updated: September 20, 2026</p>
+    <ol>
+      <li>
+        <strong>1. What stays on your device.</strong> BulkGrab scans the page you are on only when you use the extension. The list of files, your selections and ZIP bundling all happen locally in your browser. We do not collect, sell or share your browsing history or page contents. Your license status (Free or Pro), your session download count and a pending payment reference are stored in Chrome's extension storage on your device.
+      </li>
+      <li>
+        <strong>2. What is sent to our server.</strong> (a) When you click &quot;Pay with Crypto&quot;, the extension asks our licensing server, hosted on Cloudflare Workers, to create a payment invoice with NOWPayments. No personal information is included in that request. (b) When you activate Pro, the Payment ID you enter is sent to our server, which asks NOWPayments for that payment's status, order reference and amount to decide whether to unlock Pro. (c) Our hosting provider, Cloudflare, may process standard technical request data such as IP address and timestamps to operate and secure the service.
+      </li>
+      <li>
+        <strong>3. Payments.</strong> Payments are made in cryptocurrency through NOWPayments, a third party, under NOWPayments' own terms and privacy policy. We can see payment records in our NOWPayments account (payment ID, amount, status) and the public blockchain transaction. We do not receive or store your wallet keys or card details.
+      </li>
+      <li>
+        <strong>4. Optional site access.</strong> BulkGrab asks for permission to read data on all websites only if a Pro user chooses &quot;Download as ZIP&quot; for files hosted on other domains. It is used only to fetch the files you selected. You can decline it (files then download individually) and revoke it any time on the Options page.
+      </li>
+      <li>
+        <strong>5. No selling, no ads.</strong> We do not sell your data, use it for advertising, or use it for anything other than running BulkGrab and supporting your purchase.
+      </li>
+      <li>
+        <strong>6. Changes and contact.</strong> We may update this policy and will change the date above. Questions or problems: <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>.
+      </li>
+    </ol>
+  </div>
+</body>
+</html>`;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -86,6 +194,16 @@ export default {
         version: '1.0.0',
         timestamp: new Date().toISOString()
       }, null, 2), { headers: CORS_HEADERS });
+    }
+
+    // Privacy policy endpoint (mobile-friendly HTML)
+    if ((url.pathname === '/privacy' || url.pathname === '/privacy/') && request.method === 'GET') {
+      return new Response(getPrivacyHtml(), {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8'
+        }
+      });
     }
 
     // =========================================================================
