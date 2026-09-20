@@ -10,6 +10,8 @@
  * - NOWPAYMENTS_IPN_KEY: Your private NOWPayments IPN secret key (from dashboard)
  */
 
+import { SUPPORT_EMAIL } from '../utils/constants.js';
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -138,7 +140,7 @@ export default {
               orderId: null,
               priceAmount: null,
               priceCurrency: null,
-              error: 'Payment ID not found, please check you copied the Payment ID from the payment page.'
+              error: `Payment ID not found, please check you copied the Payment ID from the payment page. Support: ${SUPPORT_EMAIL}`
             }), { status: 404, headers: CORS_HEADERS });
           }
 
@@ -147,7 +149,7 @@ export default {
             orderId: null,
             priceAmount: null,
             priceCurrency: null,
-            error: errJson?.message || `NOWPayments API returned HTTP ${nowpaymentsRes.status}`
+            error: `${errJson?.message || `NOWPayments API returned HTTP ${nowpaymentsRes.status}`}. Support: ${SUPPORT_EMAIL}`
           }), { status: nowpaymentsRes.status, headers: CORS_HEADERS });
         }
 
@@ -172,8 +174,8 @@ export default {
         if (!isBulkGrabOrder || !isBulkGrabPrice) {
           return new Response(JSON.stringify({
             valid: false,
-            message: 'This payment is not a BulkGrab Pro purchase.',
-            error: 'This payment is not a BulkGrab Pro purchase.',
+            message: `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`,
+            error: `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`,
             orderId,
             priceAmount,
             priceCurrency,
@@ -207,7 +209,7 @@ export default {
             orderId,
             priceAmount,
             priceCurrency,
-            error: 'Payment is waiting for funds. If you just sent crypto, please allow a moment for the transaction to be detected on the network.'
+            error: `Payment is waiting for funds. If you just sent crypto, please allow a moment for the transaction to be detected on the network. Support: ${SUPPORT_EMAIL}`
           }), { status: 200, headers: CORS_HEADERS });
         }
 
@@ -220,7 +222,7 @@ export default {
             orderId,
             priceAmount,
             priceCurrency,
-            error: 'Transaction detected on the blockchain! Awaiting network block confirmations (usually 2–5 minutes). Please try again shortly.'
+            error: `Transaction detected on the blockchain! Awaiting network block confirmations (usually 2–5 minutes). Please try again shortly. Support: ${SUPPORT_EMAIL}`
           }), { status: 200, headers: CORS_HEADERS });
         }
 
@@ -233,7 +235,7 @@ export default {
             orderId,
             priceAmount,
             priceCurrency,
-            error: 'Payment confirmed on blockchain and finalizing payout. Please re-verify in 1–2 minutes.'
+            error: `Payment confirmed on blockchain and finalizing payout. Please re-verify in 1–2 minutes. Support: ${SUPPORT_EMAIL}`
           }), { status: 200, headers: CORS_HEADERS });
         }
 
@@ -245,7 +247,7 @@ export default {
             orderId,
             priceAmount,
             priceCurrency,
-            error: `Payment was partially paid (received ${data.actually_paid || 0} ${data.pay_currency || ''} of required ${data.pay_amount || ''} ${data.pay_currency || ''}). Please check your NOWPayments invoice to complete payment.`
+            error: `Payment was partially paid (received ${data.actually_paid || 0} ${data.pay_currency || ''} of required ${data.pay_amount || ''} ${data.pay_currency || ''}). Please check your NOWPayments invoice to complete payment. Support: ${SUPPORT_EMAIL}`
           }), { status: 200, headers: CORS_HEADERS });
         }
 
@@ -257,7 +259,7 @@ export default {
             orderId,
             priceAmount,
             priceCurrency,
-            error: `Payment has ${status}. Please initiate a new payment link.`
+            error: `Payment has ${status}. Please initiate a new payment link. Support: ${SUPPORT_EMAIL}`
           }), { status: 200, headers: CORS_HEADERS });
         }
 
@@ -268,15 +270,15 @@ export default {
             orderId,
             priceAmount,
             priceCurrency,
-            error: 'This payment was refunded.'
+            error: `This payment was refunded. Support: ${SUPPORT_EMAIL}`
           }), { status: 200, headers: CORS_HEADERS });
         }
 
         // Fallback for any unknown status
         return new Response(JSON.stringify({
           valid: false,
-          message: 'This payment is not a BulkGrab Pro purchase.',
-          error: `Current payment status: ${status}. Please try again later.`,
+          message: `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`,
+          error: `Current payment status: ${status}. Please try again later. Support: ${SUPPORT_EMAIL}`,
           orderId,
           priceAmount,
           priceCurrency,
@@ -290,7 +292,7 @@ export default {
           orderId: null,
           priceAmount: null,
           priceCurrency: null,
-          error: `Verification error: ${err.message}`
+          error: `Verification error: ${err.message}. Support: ${SUPPORT_EMAIL}`
         }), { status: 500, headers: CORS_HEADERS });
       }
     }

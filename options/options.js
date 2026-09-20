@@ -3,9 +3,15 @@
  * Manages license activation stub, tier inspection, and reset controls.
  */
 
-import { MESSAGE_ACTIONS, FREE_DOWNLOAD_LIMIT } from '../utils/constants.js';
+import { MESSAGE_ACTIONS, FREE_DOWNLOAD_LIMIT, SUPPORT_EMAIL } from '../utils/constants.js';
 
 async function init() {
+  const supportLink = document.getElementById('support-link');
+  if (supportLink) {
+    supportLink.href = `mailto:${SUPPORT_EMAIL}`;
+    supportLink.textContent = SUPPORT_EMAIL;
+  }
+
   const tierBadge = document.getElementById('tier-badge');
   const tierDescription = document.getElementById('tier-description');
   const sessionInfoBox = document.getElementById('session-info-box');
@@ -146,12 +152,12 @@ async function init() {
         showMessage(response.message || 'Pro license activated successfully!', 'success');
         await refreshUI();
       } else if (response && response.pending) {
-        showMessage(response.error || 'Payment detected on blockchain but awaiting confirmation. Please try again in 2-5 minutes.', 'info');
+        showMessage(response.error || `Payment detected on blockchain but awaiting confirmation. Please try again in 2-5 minutes. Support: ${SUPPORT_EMAIL}`, 'info');
       } else {
-        showMessage(response?.error || 'License verification failed.', 'error');
+        showMessage(response?.error || `License verification failed. Support: ${SUPPORT_EMAIL}`, 'error');
       }
     } catch (err) {
-      showMessage(`Verification error: ${err.message}`, 'error');
+      showMessage(`Verification error: ${err.message}. Support: ${SUPPORT_EMAIL}`, 'error');
     } finally {
       btnActivate.disabled = false;
       btnActivate.textContent = 'Activate Pro';

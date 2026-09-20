@@ -93,3 +93,7 @@ export const NOWPAYMENTS_API_BASE = 'https://api.nowpayments.io/v1';
 export const NOWPAYMENTS_WORKER_URL = 'https://bulkgrab-licensing.sidoua26.workers.dev/api/verify-payment';
 export const NOWPAYMENTS_WORKER_CREATE_PAYMENT_URL = 'https://bulkgrab-licensing.sidoua26.workers.dev/api/create-payment';
 
+// Customer support contact email
+export const SUPPORT_EMAIL = 'sidoua26@gmail.com';
+
+

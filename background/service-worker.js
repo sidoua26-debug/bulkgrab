@@ -11,7 +11,8 @@ import {
   NOWPAYMENTS_WORKER_URL,
   NOWPAYMENTS_WORKER_CREATE_PAYMENT_URL,
   NOWPAYMENTS_PAYMENT_URL,
-  NOWPAYMENTS_API_BASE 
+  NOWPAYMENTS_API_BASE,
+  SUPPORT_EMAIL 
 } from '../utils/constants.js';
 
 // Initialize default state on extension install or update
@@ -73,7 +74,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
  */
 async function evaluatePaymentStatus(data, paymentId) {
   // If data was already validated or rejected by the worker
-  if (data.valid === false && data.message === 'This payment is not a BulkGrab Pro purchase.') {
+  if (data.valid === false && (data.message?.includes('This payment is not a BulkGrab Pro purchase') || data.error?.includes('This payment is not a BulkGrab Pro purchase'))) {
     return data;
   }
 
@@ -93,8 +94,8 @@ async function evaluatePaymentStatus(data, paymentId) {
   if (!isBulkGrabOrder || !isBulkGrabPrice) {
     return {
       valid: false,
-      message: 'This payment is not a BulkGrab Pro purchase.',
-      error: 'This payment is not a BulkGrab Pro purchase.',
+      message: `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`,
+      error: `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`,
       orderId,
       priceAmount,
       priceCurrency,
@@ -135,7 +136,7 @@ async function evaluatePaymentStatus(data, paymentId) {
       orderId,
       priceAmount,
       priceCurrency,
-      error: 'Payment is waiting for funds. If you just sent crypto, please allow a moment for the transaction to be detected on the network.'
+      error: `Payment is waiting for funds. If you just sent crypto, please allow a moment for the transaction to be detected on the network. Support: ${SUPPORT_EMAIL}`
     };
   }
 
@@ -149,7 +150,7 @@ async function evaluatePaymentStatus(data, paymentId) {
       orderId,
       priceAmount,
       priceCurrency,
-      error: 'Transaction detected on the blockchain! Awaiting network block confirmations (usually 2–5 minutes). Please try again shortly.'
+      error: `Transaction detected on the blockchain! Awaiting network block confirmations (usually 2–5 minutes). Please try again shortly. Support: ${SUPPORT_EMAIL}`
     };
   }
 
@@ -163,7 +164,7 @@ async function evaluatePaymentStatus(data, paymentId) {
       orderId,
       priceAmount,
       priceCurrency,
-      error: 'Payment confirmed on blockchain and finalizing payout. Please re-verify in 1–2 minutes.'
+      error: `Payment confirmed on blockchain and finalizing payout. Please re-verify in 1–2 minutes. Support: ${SUPPORT_EMAIL}`
     };
   }
 
@@ -176,7 +177,7 @@ async function evaluatePaymentStatus(data, paymentId) {
       orderId,
       priceAmount,
       priceCurrency,
-      error: `Payment was partially paid (received ${data.actually_paid || 0} ${data.pay_currency || ''} of required ${data.pay_amount || ''} ${data.pay_currency || ''}). Please check your NOWPayments receipt to pay the remaining balance.`
+      error: `Payment was partially paid (received ${data.actually_paid || 0} ${data.pay_currency || ''} of required ${data.pay_amount || ''} ${data.pay_currency || ''}). Please check your NOWPayments receipt to pay the remaining balance. Support: ${SUPPORT_EMAIL}`
     };
   }
 
@@ -189,7 +190,7 @@ async function evaluatePaymentStatus(data, paymentId) {
       orderId,
       priceAmount,
       priceCurrency,
-      error: `Payment has ${status}. Please initiate a new payment link.`
+      error: `Payment has ${status}. Please initiate a new payment link. Support: ${SUPPORT_EMAIL}`
     };
   }
 
@@ -202,14 +203,14 @@ async function evaluatePaymentStatus(data, paymentId) {
       orderId,
       priceAmount,
       priceCurrency,
-      error: 'This payment was refunded.'
+      error: `This payment was refunded. Support: ${SUPPORT_EMAIL}`
     };
   }
 
   return {
     valid: false,
-    message: 'This payment is not a BulkGrab Pro purchase.',
-    error: `Payment status is currently ${status}.`,
+    message: `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`,
+    error: `Payment status is currently ${status}. Support: ${SUPPORT_EMAIL}`,
     paymentId: String(paymentId),
     orderId,
     priceAmount,
@@ -246,7 +247,7 @@ export async function verifyLicense(paymentId, options = {}) {
     return {
       valid: false,
       isInvoiceId: true,
-      error: 'That is the Invoice ID. After paying, copy the Payment ID shown at the top of the payment page and paste it here to activate Pro.'
+      error: `That is the Invoice ID. After paying, copy the Payment ID shown at the top of the payment page and paste it here to activate Pro. Support: ${SUPPORT_EMAIL}`
     };
   }
 
@@ -254,7 +255,7 @@ export async function verifyLicense(paymentId, options = {}) {
     return {
       valid: false,
       isInvoiceId: true,
-      error: 'That is the invoice link or Invoice ID. After paying, copy the Payment ID shown at the top of the payment page and paste it here to activate Pro.'
+      error: `That is the invoice link or Invoice ID. After paying, copy the Payment ID shown at the top of the payment page and paste it here to activate Pro. Support: ${SUPPORT_EMAIL}`
     };
   }
 
@@ -268,7 +269,7 @@ export async function verifyLicense(paymentId, options = {}) {
       return {
         valid: false,
         notFound: true,
-        error: 'Payment ID not found, please check you copied the Payment ID from the payment page.'
+        error: `Payment ID not found, please check you copied the Payment ID from the payment page. Support: ${SUPPORT_EMAIL}`
       };
     }
 
@@ -331,7 +332,7 @@ export async function verifyLicense(paymentId, options = {}) {
           orderId: errJson?.orderId || null,
           priceAmount: errJson?.priceAmount || null,
           priceCurrency: errJson?.priceCurrency || null,
-          error: 'Payment ID not found, please check you copied the Payment ID from the payment page.'
+          error: `Payment ID not found, please check you copied the Payment ID from the payment page. Support: ${SUPPORT_EMAIL}`
         };
       }
 
@@ -340,7 +341,7 @@ export async function verifyLicense(paymentId, options = {}) {
         orderId: errJson?.orderId || null,
         priceAmount: errJson?.priceAmount || null,
         priceCurrency: errJson?.priceCurrency || null,
-        error: errJson?.error || errJson?.message || `Payment verification returned HTTP ${res.status}`
+        error: errJson?.error || errJson?.message || `Payment verification returned HTTP ${res.status}. Support: ${SUPPORT_EMAIL}`
       };
     }
 
@@ -352,7 +353,7 @@ export async function verifyLicense(paymentId, options = {}) {
         orderId: data?.orderId || null,
         priceAmount: data?.priceAmount || null,
         priceCurrency: data?.priceCurrency || null,
-        error: 'Payment ID not found, please check you copied the Payment ID from the payment page.'
+        error: `Payment ID not found, please check you copied the Payment ID from the payment page. Support: ${SUPPORT_EMAIL}`
       };
     }
     if (data?.valid === false) {
@@ -364,7 +365,7 @@ export async function verifyLicense(paymentId, options = {}) {
     console.warn('[BulkGrab Service Worker] Payment verification network error:', err);
     return {
       valid: false,
-      error: `Network error connecting to payment verification service: ${err.message}`
+      error: `Network error connecting to payment verification service: ${err.message}. Support: ${SUPPORT_EMAIL}`
     };
   }
 }

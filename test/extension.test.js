@@ -961,6 +961,12 @@ async function runTests() {
         'UI status alert must display friendly not-found message'
       );
 
+      // Verify support line under Payment ID box
+      const supportLineText = await page.$eval('.input-support', el => el.textContent.trim());
+      assert.strictEqual(supportLineText, 'Support: sidoua26@gmail.com', 'Support line must read "Support: sidoua26@gmail.com"');
+      const supportHref = await page.$eval('#support-link', el => el.getAttribute('href'));
+      assert.strictEqual(supportHref, 'mailto:sidoua26@gmail.com', 'Support link must be mailto: link');
+
       // 3. Verify that verifying with an Invoice ID is blocked and never activates Pro
       const createRes = await page.evaluate(async () => {
         return await chrome.runtime.sendMessage({ action: 'BULKGRAB_CREATE_PAYMENT' });
@@ -1044,6 +1050,7 @@ async function runTests() {
     // =========================================================================
     await test('Hardened /api/verify-payment requires BG_PRO_ order_id, finished status, and >= $9.99 USD', async () => {
       const { default: worker } = await import('../cloudflare-worker/worker.js');
+      const { SUPPORT_EMAIL } = await import('../utils/constants.js');
 
       const mockEnv = {
         NOWPAYMENTS_API_KEY: 'test_key_123'
@@ -1096,7 +1103,7 @@ async function runTests() {
         price_currency: 'usd'
       });
       assert.strictEqual(unrelatedFinished.valid, false);
-      assert.strictEqual(unrelatedFinished.message, 'This payment is not a BulkGrab Pro purchase.');
+      assert.strictEqual(unrelatedFinished.message, `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`);
       assert.strictEqual(unrelatedFinished.orderId, 'OTHER_STORE_PURCHASE_999');
       assert.strictEqual(unrelatedFinished.priceAmount, 9.99);
       assert.strictEqual(unrelatedFinished.priceCurrency, 'usd');
@@ -1111,7 +1118,7 @@ async function runTests() {
       });
       assert.strictEqual(unrelatedWaiting.valid, false);
       assert.strictEqual(unrelatedWaiting.pending, undefined, 'Unrelated payment must never look like pending');
-      assert.strictEqual(unrelatedWaiting.message, 'This payment is not a BulkGrab Pro purchase.');
+      assert.strictEqual(unrelatedWaiting.message, `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`);
 
       // 4. Missing order_id
       const missingOrder = await testVerifyWithMockData({
@@ -1121,7 +1128,7 @@ async function runTests() {
         price_currency: 'usd'
       });
       assert.strictEqual(missingOrder.valid, false);
-      assert.strictEqual(missingOrder.message, 'This payment is not a BulkGrab Pro purchase.');
+      assert.strictEqual(missingOrder.message, `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`);
       assert.strictEqual(missingOrder.orderId, null);
 
       // 5. Wrong currency (e.g. eur)
@@ -1133,7 +1140,7 @@ async function runTests() {
         price_currency: 'eur'
       });
       assert.strictEqual(wrongCurrency.valid, false);
-      assert.strictEqual(wrongCurrency.message, 'This payment is not a BulkGrab Pro purchase.');
+      assert.strictEqual(wrongCurrency.message, `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`);
       assert.strictEqual(wrongCurrency.priceCurrency, 'eur');
 
       // 6. Insufficient price amount (< 9.99)
@@ -1145,7 +1152,7 @@ async function runTests() {
         price_currency: 'usd'
       });
       assert.strictEqual(lowPrice.valid, false);
-      assert.strictEqual(lowPrice.message, 'This payment is not a BulkGrab Pro purchase.');
+      assert.strictEqual(lowPrice.message, `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`);
       assert.strictEqual(lowPrice.priceAmount, 5);
 
       // 7. Legitimate pending purchase with BG_PRO_ prefix and $9.99 USD
@@ -1174,7 +1181,7 @@ async function runTests() {
         });
       });
       assert.strictEqual(unrelatedResult.valid, false);
-      assert.strictEqual(unrelatedResult.message, 'This payment is not a BulkGrab Pro purchase.');
+      assert.strictEqual(unrelatedResult.message, `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`);
 
       await optionsPage.close();
     });
