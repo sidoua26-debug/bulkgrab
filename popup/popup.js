@@ -73,6 +73,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (quotaNote) quotaNote.textContent = 'Unlimited batch downloads and client-side ZIP export enabled.';
       }
       if (btnUpgrade) btnUpgrade.style.display = 'none';
+      const paymentWarning = document.getElementById('payment-warning');
+      if (paymentWarning) paymentWarning.style.display = 'none';
     } else {
       tierBadge.textContent = 'Free Plan';
       tierBadge.className = 'badge badge-free';
@@ -97,8 +99,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnUpgrade.style.display = '';
         btnUpgrade.href = NOWPAYMENTS_PAYMENT_URL;
       }
-      
-      // If an invoice was recently generated, display instruction box
+      const paymentWarning = document.getElementById('payment-warning');
+      if (paymentWarning) paymentWarning.style.display = '';
+    }
+
+    // If an invoice was recently generated, display instruction box
       chrome.storage?.local?.get(['pendingInvoiceId', 'pendingPaymentId']).then((stored) => {
         if (!isPro && (stored?.pendingInvoiceId || stored?.pendingPaymentId) && paymentInstructionBox) {
           paymentInstructionBox.style.display = 'block';

@@ -230,6 +230,13 @@ async function runTests() {
       assert(popupStats.quotaText.includes('/ 7'), 'Quota text should display / 7 format');
       assert(popupStats.upgradeHref.includes('nowpayments.io'), 'Upgrade button should point to NOWPayments checkout');
 
+      const warningText = await popupPage.$eval('#payment-warning', el => el.textContent.trim());
+      assert.strictEqual(
+        warningText,
+        'Pay with USDT on the BSC (BEP20) network only. Coins or networks sent to the address by mistake cannot be recovered.',
+        'Popup must display exact USDT on BSC (BEP20) payment warning'
+      );
+
       await popupPage.close();
     });
 
@@ -966,6 +973,17 @@ async function runTests() {
       assert.strictEqual(supportLineText, 'Support: sidoua26@gmail.com', 'Support line must read "Support: sidoua26@gmail.com"');
       const supportHref = await page.$eval('#support-link', el => el.getAttribute('href'));
       assert.strictEqual(supportHref, 'mailto:sidoua26@gmail.com', 'Support link must be mailto: link');
+
+      // Verify Step 1 payment wording in How Freemium Licensing Works
+      const step1Text = await page.$eval('.steps-list li:first-child', el => el.textContent.trim());
+      assert(
+        step1Text.includes('Pay with USDT on the BSC (BEP20) network only. Coins or networks sent to the address by mistake cannot be recovered.'),
+        'Options Step 1 must display exact USDT on BSC (BEP20) payment warning'
+      );
+      assert(
+        !step1Text.includes('or any supported cryptocurrency'),
+        'Options Step 1 must not suggest other cryptocurrencies are accepted'
+      );
 
       // 3. Verify that verifying with an Invoice ID is blocked and never activates Pro
       const createRes = await page.evaluate(async () => {
