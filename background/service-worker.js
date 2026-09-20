@@ -38,13 +38,15 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 });
 
 /**
- * Clear badge on tab navigation.
- * Per minimal-permissions design, badge is cleared when page begins loading
- * and is repopulated only upon user action/popup inspection.
+ * Tab-scanned files cache and badge handling.
  */
+const tabScannedFiles = new Map();
+let latestScannedFiles = [];
+
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === 'loading') {
     chrome.action.setBadgeText({ text: '', tabId });
+    tabScannedFiles.delete(tabId);
   }
 });
 
@@ -867,9 +869,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // 7. Update tab action badge count
+  // 7. Update tab action badge count and cache detected files
   if (message.action === MESSAGE_ACTIONS.UPDATE_BADGE && tabId) {
     const count = Number(message.count) || 0;
+    if (Array.isArray(message.files)) {
+      tabScannedFiles.set(tabId, message.files);
+      latestScannedFiles = message.files;
+    }
     chrome.action.setBadgeText({
       text: count > 0 ? String(count) : '',
       tabId: tabId
@@ -879,6 +885,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       tabId: tabId
     });
     sendResponse({ status: 'ok' });
+    return false;
+  }
+
+  // 7b. Retrieve cached page files for tab or latest
+  if (message.action === MESSAGE_ACTIONS.GET_PAGE_FILES) {
+    const targetTabId = message.tabId || tabId;
+    const files = (targetTabId && tabScannedFiles.get(targetTabId)) || latestScannedFiles || [];
+    sendResponse({ status: 'ok', files, count: files.length });
     return false;
   }
 

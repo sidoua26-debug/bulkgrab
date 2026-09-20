@@ -104,12 +104,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // If an invoice was recently generated, display instruction box
-      chrome.storage?.local?.get(['pendingInvoiceId', 'pendingPaymentId']).then((stored) => {
-        if (!isPro && (stored?.pendingInvoiceId || stored?.pendingPaymentId) && paymentInstructionBox) {
-          paymentInstructionBox.style.display = 'block';
-        }
-      }).catch(() => {});
-    }
+    chrome.storage?.local?.get(['pendingInvoiceId', 'pendingPaymentId']).then((stored) => {
+      if (!isPro && (stored?.pendingInvoiceId || stored?.pendingPaymentId) && paymentInstructionBox) {
+        paymentInstructionBox.style.display = 'block';
+      }
+    }).catch(() => {});
   }
 
   const paymentInstructionBox = document.getElementById('payment-instruction-box');
@@ -173,7 +172,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // 2. Query and inspect active tab
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  let [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (activeTab && (activeTab.url?.startsWith('chrome-extension://') || activeTab.url?.startsWith('chrome://'))) {
+    const tabs = await chrome.tabs.query({});
+    const webTab = tabs.find(t => t.url && (t.url.startsWith('http://') || t.url.startsWith('https://') || t.url.startsWith('file://')));
+    if (webTab) {
+      activeTab = webTab;
+    }
+  }
 
   // Guard against unscriptable URLs
   if (
@@ -186,14 +192,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     activeTab.url.startsWith('edge://') ||
     activeTab.url.includes('chromewebstore.google.com')
   ) {
-    activeDomainEl.textContent = 'Restricted page';
-    fileCountEl.textContent = '—';
-    if (btnTogglePanel) {
-      btnTogglePanel.disabled = true;
-      btnTogglePanel.title = 'Cannot run on browser internal or Web Store pages';
+    let hasCachedFiles = false;
+    try {
+      const swRes = await chrome.runtime.sendMessage({ action: MESSAGE_ACTIONS.GET_PAGE_FILES });
+      if (swRes && swRes.status === 'ok' && swRes.files && swRes.files.length > 0) {
+        hasCachedFiles = true;
+        activeDomainEl.textContent = 'Detected Files';
+        updateFileStats(swRes.files);
+      }
+    } catch (_) {}
+
+    if (!hasCachedFiles) {
+      activeDomainEl.textContent = 'Restricted page';
+      fileCountEl.textContent = '—';
+      if (btnTogglePanel) {
+        btnTogglePanel.disabled = true;
+        btnTogglePanel.title = 'Cannot run on browser internal or Web Store pages';
+      }
+      if (btnRescan) btnRescan.disabled = true;
+      return;
     }
-    if (btnRescan) btnRescan.disabled = true;
-    return;
   }
 
   // Display domain
@@ -252,16 +270,28 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Query files from page
   async function fetchPageFiles() {
     fileCountEl.textContent = '...';
-    const injection = await ensureContentScriptInjected();
-    if (injection.success) {
-      try {
-        const res = await chrome.tabs.sendMessage(activeTab.id, { action: MESSAGE_ACTIONS.GET_PAGE_FILES });
-        if (res && res.status === 'ok') {
-          updateFileStats(res.files || []);
-          return;
-        }
-      } catch (_) {}
+    if (activeTab && activeTab.id) {
+      const injection = await ensureContentScriptInjected();
+      if (injection.success) {
+        try {
+          const res = await chrome.tabs.sendMessage(activeTab.id, { action: MESSAGE_ACTIONS.GET_PAGE_FILES });
+          if (res && res.status === 'ok' && res.files) {
+            updateFileStats(res.files);
+            return;
+          }
+        } catch (_) {}
+      }
     }
+
+    // Fallback: query cached files from Service Worker
+    try {
+      const swRes = await chrome.runtime.sendMessage({ action: MESSAGE_ACTIONS.GET_PAGE_FILES, tabId: activeTab?.id });
+      if (swRes && swRes.status === 'ok' && swRes.files && swRes.files.length > 0) {
+        updateFileStats(swRes.files);
+        return;
+      }
+    } catch (_) {}
+
     fileCountEl.textContent = '0';
   }
 

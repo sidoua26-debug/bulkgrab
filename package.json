@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "node test/extension.test.js",
+    "package": "node scripts/package.js",
     "render-icons": "node scripts/render-icons.js"
   },
   "keywords": [],

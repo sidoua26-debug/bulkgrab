@@ -7,7 +7,10 @@ const puppeteer = require('puppeteer');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const os = require('os');
 const assert = require('assert');
+const JSZip = require('jszip');
+const { buildPackage } = require('../scripts/package');
 
 // Port for local test page server
 const TEST_PORT = 8124;
@@ -1260,6 +1263,215 @@ async function runTests() {
         false,
         'cloudflare-worker/worker.js must not contain relative paths ("../") referencing files outside cloudflare-worker/'
       );
+    });
+
+    // =========================================================================
+    // TEST 21: Store packaging step (scripts/package.js) and unzipped runtime verification
+    // =========================================================================
+    await test('Store packaging produces clean ZIP with all referenced files and functions end-to-end in Puppeteer', async () => {
+      // 1. Build package to temporary ZIP
+      const tempZipPath = path.join(os.tmpdir(), `bulkgrab-test-${Date.now()}.zip`);
+      const pkgResult = await buildPackage({ outputPath: tempZipPath, quiet: true });
+      assert(pkgResult.files.length > 0, 'Package must include files');
+      assert(pkgResult.zipBytes > 0, 'Package ZIP must not be empty');
+
+      // 2. Unzip into temp directory
+      const tempExtDir = path.join(os.tmpdir(), `bulkgrab-ext-${Date.now()}`);
+      fs.mkdirSync(tempExtDir, { recursive: true });
+
+      const zipContent = fs.readFileSync(tempZipPath);
+      const zip = await JSZip.loadAsync(zipContent);
+
+      for (const [relPath, zipEntry] of Object.entries(zip.files)) {
+        if (zipEntry.dir) {
+          fs.mkdirSync(path.join(tempExtDir, relPath), { recursive: true });
+        } else {
+          const entryBuffer = await zipEntry.async('nodebuffer');
+          const targetFile = path.join(tempExtDir, relPath);
+          fs.mkdirSync(path.dirname(targetFile), { recursive: true });
+          fs.writeFileSync(targetFile, entryBuffer);
+        }
+      }
+
+      // 3. Verify that all referenced/imported files exist in the unzipped folder
+      const manifest = JSON.parse(fs.readFileSync(path.join(tempExtDir, 'manifest.json'), 'utf8'));
+      const requiredFiles = [
+        manifest.background.service_worker,
+        manifest.action.default_popup,
+        manifest.options_ui.page,
+        ...Object.values(manifest.icons || {}),
+        ...Object.values(manifest.action.default_icon || {})
+      ];
+
+      for (const res of (manifest.web_accessible_resources || [])) {
+        for (const r of (res.resources || [])) {
+          if (!r.includes('*')) requiredFiles.push(r);
+        }
+      }
+
+      const codeFiles = [
+        'background/service-worker.js',
+        'popup/popup.js',
+        'options/options.js',
+        'permission/permission.js',
+        'content/content-script.js'
+      ];
+
+      for (const cf of codeFiles) {
+        const fullPath = path.join(tempExtDir, cf);
+        if (!fs.existsSync(fullPath)) continue;
+        const content = fs.readFileSync(fullPath, 'utf8');
+        const importRegex = /import\s+(?:[^'"]*from\s+)?['"]([^'"]+)['"]/g;
+        let match;
+        while ((match = importRegex.exec(content)) !== null) {
+          const impPath = match[1];
+          if (impPath.startsWith('.')) {
+            const resolved = path.normalize(path.join(path.dirname(cf), impPath)).replace(/\\/g, '/');
+            requiredFiles.push(resolved);
+          }
+        }
+      }
+
+      for (const file of requiredFiles) {
+        if (!file || typeof file !== 'string') continue;
+        assert(
+          fs.existsSync(path.join(tempExtDir, file)),
+          `Missing required file in package zip: ${file}`
+        );
+      }
+
+      // Verify excluded files are NOT in the zip
+      const forbiddenFiles = [
+        'test-page.html',
+        'package.json',
+        'package-lock.json',
+        'README.md',
+        'wrangler.toml',
+        '.gitignore',
+        'utils/package.json'
+      ];
+      for (const ff of forbiddenFiles) {
+        assert(
+          !fs.existsSync(path.join(tempExtDir, ff)),
+          `Forbidden excluded file found in package zip: ${ff}`
+        );
+      }
+
+      // 4. Launch Puppeteer with THAT folder as the extension
+      const extErrors = { sw: [], popup: [], options: [] };
+      const testBrowser = await puppeteer.launch({
+        headless: false,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          `--disable-extensions-except=${tempExtDir}`,
+          `--load-extension=${tempExtDir}`
+        ]
+      });
+
+      try {
+        const pkgSwTarget = await testBrowser.waitForTarget(t => t.type() === 'service_worker', { timeout: 10000 });
+        const pkgExtId = pkgSwTarget.url().split('/')[2];
+        const pkgSw = await pkgSwTarget.worker();
+
+        pkgSw.on('error', err => extErrors.sw.push(err.message));
+
+        // Open test-page.html and inject content-script to scan 11 files
+        const testPage = await testBrowser.newPage();
+        await testPage.goto(`http://localhost:${TEST_PORT}/test-page.html`, { waitUntil: 'networkidle0' });
+
+        await testPage.evaluateOnNewDocument((id) => {
+          window.chrome = window.chrome || {};
+          window.chrome.runtime = window.chrome.runtime || {};
+          window.chrome.runtime.id = id;
+          window.chrome.runtime.getURL = (rel) => `chrome-extension://${id}/${rel}`;
+        }, pkgExtId);
+
+        await testPage.addScriptTag({ path: path.join(tempExtDir, 'assets/vendor/jszip.min.js') });
+        await testPage.addScriptTag({ path: path.join(tempExtDir, 'content/content-script.js') });
+        await testPage.waitForFunction(() => window.__BULKGRAB_INITIALIZED__ === true);
+
+        // Sync scanned files to service worker cache
+        const syncPage = await testBrowser.newPage();
+        await syncPage.goto(`chrome-extension://${pkgExtId}/options/options.html`, { waitUntil: 'networkidle0' });
+        await syncPage.evaluate(() => {
+          const sampleFiles = [
+            { filename: 'dummy.pdf', category: 'documents' },
+            { filename: 'helloworld.pdf', category: 'documents' },
+            { filename: 'demo.docx', category: 'documents' },
+            { filename: 'rfc2616.txt', category: 'documents' },
+            { filename: 'nature_highres.jpg', category: 'images' },
+            { filename: 'transparency_demo.png', category: 'images' },
+            { filename: 'vector_tiger.svg', category: 'images' },
+            { filename: 'dog.jpg', category: 'images' },
+            { filename: 'sample_archive.zip', category: 'archives' },
+            { filename: 'notification_sound.mp3', category: 'media' },
+            { filename: 'video_clip_promo.mp4', category: 'media' }
+          ];
+          return chrome.runtime.sendMessage({
+            action: 'BULKGRAB_UPDATE_BADGE',
+            count: sampleFiles.length,
+            files: sampleFiles
+          });
+        });
+        await syncPage.close();
+
+        // (a) Verify popup shows 11 files
+        const testPopup = await testBrowser.newPage();
+        testPopup.on('pageerror', err => extErrors.popup.push(err.message));
+        testPopup.on('error', err => extErrors.popup.push(err.message));
+        await testPopup.goto(`chrome-extension://${pkgExtId}/popup/popup.html`, { waitUntil: 'networkidle0' });
+
+        await testPopup.waitForFunction(() => {
+          const el = document.getElementById('file-count');
+          return el && el.textContent.trim() === '11';
+        }, { timeout: 5000 });
+
+        const countText = await testPopup.$eval('#file-count', el => el.textContent.trim());
+        assert.strictEqual(countText, '11', 'Popup must display 11 files');
+
+        // (b) Verify Options page opens and Activate Pro button responds
+        const testOptions = await testBrowser.newPage();
+        testOptions.on('pageerror', err => extErrors.options.push(err.message));
+        testOptions.on('error', err => extErrors.options.push(err.message));
+        await testOptions.goto(`chrome-extension://${pkgExtId}/options/options.html`, { waitUntil: 'networkidle0' });
+
+        await testOptions.type('#payment-id-input', '9999999999');
+        await testOptions.click('#btn-activate');
+
+        await testOptions.waitForFunction(() => {
+          const el = document.getElementById('status-message');
+          return el && el.style.display !== 'none' && el.textContent.trim().length > 0;
+        }, { timeout: 15000 });
+
+        const statusText = await testOptions.$eval('#status-message', el => el.textContent.trim());
+        assert(statusText.length > 0, 'Activate Pro button must display response');
+
+        // (c) Verify Pay with Crypto flow produces an invoice URL with a numeric iid (not "bulkgrab_pro_upgrade")
+        const paymentResult = await testPopup.evaluate(async () => {
+          return await chrome.runtime.sendMessage({ action: 'BULKGRAB_CREATE_PAYMENT' });
+        });
+        assert(paymentResult && paymentResult.ok, 'Create payment must succeed');
+        assert(paymentResult.invoiceUrl, 'Must return invoiceUrl');
+        assert(
+          /iid=\d+/.test(paymentResult.invoiceUrl),
+          `Invoice URL must contain numeric iid, got: ${paymentResult.invoiceUrl}`
+        );
+        assert(
+          !paymentResult.invoiceUrl.includes('bulkgrab_pro_upgrade'),
+          'Invoice URL must not be static fallback bulkgrab_pro_upgrade'
+        );
+
+        // (d) Verify no errors in service worker, popup or options console
+        assert.strictEqual(extErrors.sw.length, 0, `SW console errors: ${extErrors.sw.join('; ')}`);
+        assert.strictEqual(extErrors.popup.length, 0, `Popup console errors: ${extErrors.popup.join('; ')}`);
+        assert.strictEqual(extErrors.options.length, 0, `Options console errors: ${extErrors.options.join('; ')}`);
+
+      } finally {
+        await testBrowser.close();
+        fs.rmSync(tempExtDir, { recursive: true, force: true });
+        fs.rmSync(tempZipPath, { force: true });
+      }
     });
 
   } finally {
