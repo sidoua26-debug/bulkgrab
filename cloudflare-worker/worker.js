@@ -275,6 +275,74 @@ export default {
       }
     }
 
+    // =========================================================================
+    // ENDPOINT 3: Create Dynamic Payment Invoice (called when clicking "Pay with Crypto")
+    // POST /api/create-payment or GET /api/create-payment
+    // =========================================================================
+    if (url.pathname === '/api/create-payment') {
+      if (!env.NOWPAYMENTS_API_KEY) {
+        console.error('[Worker] NOWPAYMENTS_API_KEY secret is not configured!');
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'Worker configuration error: NOWPAYMENTS_API_KEY secret is not set.'
+        }), { status: 500, headers: CORS_HEADERS });
+      }
+
+      try {
+        const orderId = `BG_PRO_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const webhookUrl = `${url.origin}/api/webhook`;
+
+        // Create fresh invoice via NOWPayments Payments/Invoice API
+        const invoiceRes = await fetch('https://api.nowpayments.io/v1/invoice', {
+          method: 'POST',
+          headers: {
+            'x-api-key': env.NOWPAYMENTS_API_KEY,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            price_amount: 9.99,
+            price_currency: 'usd',
+            pay_currency: 'usdtbsc',
+            ipn_callback_url: webhookUrl,
+            order_id: orderId,
+            order_description: 'BulkGrab Pro Lifetime License'
+          })
+        });
+
+        if (!invoiceRes.ok) {
+          const errText = await invoiceRes.text();
+          let errJson;
+          try { errJson = JSON.parse(errText); } catch (_) {}
+          console.error('[Worker] Failed to create NOWPayments invoice:', errText);
+          return new Response(JSON.stringify({
+            ok: false,
+            error: errJson?.message || `NOWPayments API returned HTTP ${invoiceRes.status}`
+          }), { status: invoiceRes.status, headers: CORS_HEADERS });
+        }
+
+        const data = await invoiceRes.json();
+        const invoiceUrl = data.invoice_url || `https://nowpayments.io/payment/?iid=${data.id}`;
+        const paymentId = String(data.id || data.payment_id || '');
+
+        return new Response(JSON.stringify({
+          ok: true,
+          invoiceUrl,
+          paymentId,
+          orderId: data.order_id,
+          priceAmount: data.price_amount,
+          payCurrency: data.pay_currency
+        }), { status: 200, headers: CORS_HEADERS });
+
+      } catch (err) {
+        console.error('[Worker] Create invoice error:', err);
+        return new Response(JSON.stringify({
+          ok: false,
+          error: `Error creating payment invoice: ${err.message}`
+        }), { status: 500, headers: CORS_HEADERS });
+      }
+    }
+
     return new Response(JSON.stringify({ error: 'Endpoint not found' }), {
       status: 404,
       headers: CORS_HEADERS

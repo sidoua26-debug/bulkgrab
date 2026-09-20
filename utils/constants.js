@@ -55,7 +55,8 @@ export const STORAGE_KEYS = {
   LICENSE_STATUS: 'licenseStatus',                 // 'free' | 'pro'
   SESSION_DOWNLOADS: 'sessionDownloadCount',       // integer (stored in chrome.storage.session)
   NOWPAYMENTS_PAYMENT_ID: 'nowpaymentsPaymentId', // string (NOWPayments Payment ID)
-  PAYMENT_ID: 'nowpaymentsPaymentId'               // convenience alias
+  PAYMENT_ID: 'nowpaymentsPaymentId',              // convenience alias
+  PENDING_PAYMENT_ID: 'pendingPaymentId'           // string (most recently generated dynamic payment ID)
 };
 
 // Message actions for runtime communication between components
@@ -76,17 +77,18 @@ export const MESSAGE_ACTIONS = {
   CHECK_PERMISSIONS: 'BULKGRAB_CHECK_PERMISSIONS',
   PROMPT_PERMISSIONS: 'BULKGRAB_PROMPT_PERMISSIONS',
   PERMISSION_RESPONSE: 'BULKGRAB_PERMISSION_RESPONSE',
-  CREATE_ZIP: 'BULKGRAB_CREATE_ZIP'
+  CREATE_ZIP: 'BULKGRAB_CREATE_ZIP',
+  CREATE_PAYMENT: 'BULKGRAB_CREATE_PAYMENT'
 };
 
-// NOWPayments payment link placeholder for Pro tier upgrade ($9.99 fixed price)
-// Create your static payment link in NOWPayments Dashboard -> Payment Links and paste the URL here.
+// Fallback payment URL for Pro tier upgrade ($9.99 fixed price)
 export const NOWPAYMENTS_PAYMENT_URL = 'https://nowpayments.io/payment/?iid=bulkgrab_pro_upgrade';
 
 // NOWPayments API base URL
 export const NOWPAYMENTS_API_BASE = 'https://api.nowpayments.io/v1';
 
-// Cloudflare Worker backend verification endpoint URL
+// Cloudflare Worker backend endpoints
 // Deploy cloudflare-worker/worker.js and replace with your live workers.dev URL
 export const NOWPAYMENTS_WORKER_URL = 'https://bulkgrab-licensing.YOUR_SUBDOMAIN.workers.dev/api/verify-payment';
+export const NOWPAYMENTS_WORKER_CREATE_PAYMENT_URL = 'https://bulkgrab-licensing.YOUR_SUBDOMAIN.workers.dev/api/create-payment';
 

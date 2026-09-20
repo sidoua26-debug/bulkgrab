@@ -73,19 +73,9 @@ The extension uses NOWPayments for cryptocurrency payments and includes status v
 
 ## Setting Up NOWPayments (Crypto Payments)
 
-To point licensing at a production NOWPayments and Cloudflare Worker backend:
+The extension generates invoices dynamically via NOWPayments' Payments API and your Cloudflare Worker backend, ensuring each customer receives their own dedicated deposit address and Payment ID automatically without any manual link creation.
 
-### 1. Create a Static Payment Link in NOWPayments
-1. Log into your [NOWPayments Dashboard](https://account.nowpayments.io).
-2. Go to **Payment Links** (or Store / Invoices) in the sidebar.
-3. Click **Create payment link**:
-   - **Price**: `$9.99`
-   - **Price Currency**: `USD`
-   - **Pay Currency**: Select `USDTBSC` (or multi-currency accepting any coin converted to your USDT BSC payout address).
-   - **Order Description**: `BulkGrab Pro Lifetime License`
-4. Copy the resulting Payment Link URL and paste it as `NOWPAYMENTS_PAYMENT_URL` in [`utils/constants.js`](utils/constants.js).
-
-### 2. Deploy the Cloudflare Worker Backend
+### 1. Deploy the Cloudflare Worker Backend
 The complete Worker code is provided in [`cloudflare-worker/worker.js`](cloudflare-worker/worker.js).
 
 #### Option A: Cloudflare Dashboard (Browser — 2 Minutes, Zero Install)
@@ -113,7 +103,7 @@ npx wrangler secret put NOWPAYMENTS_IPN_KEY
 npx wrangler deploy
 ```
 
-### 3. Set Webhook URL in NOWPayments Dashboard
+### 2. Set Webhook URL in NOWPayments Dashboard
 1. In the NOWPayments dashboard, navigate to **Settings** -> **Payment settings** -> **Instant Payment Notifications (IPN)**.
 2. Enter your live Worker webhook URL:
    ```
@@ -121,10 +111,11 @@ npx wrangler deploy
    ```
 3. Click **Save** and use the **Test IPN** button to verify connectivity.
 
-### 4. Connect Worker URL to Extension
-In [`utils/constants.js`](utils/constants.js), update `NOWPAYMENTS_WORKER_URL`:
+### 3. Connect Worker URL to Extension
+In [`utils/constants.js`](utils/constants.js), update the worker URLs:
 ```javascript
 export const NOWPAYMENTS_WORKER_URL = 'https://bulkgrab-licensing.<your-subdomain>.workers.dev/api/verify-payment';
+export const NOWPAYMENTS_WORKER_CREATE_PAYMENT_URL = 'https://bulkgrab-licensing.<your-subdomain>.workers.dev/api/create-payment';
 ```
 
 ---

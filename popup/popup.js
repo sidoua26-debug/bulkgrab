@@ -100,6 +100,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // Dynamic payment invoice creation on click
+  btnUpgrade?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const originalContent = btnUpgrade.innerHTML;
+    btnUpgrade.innerHTML = '<span>⏳ Creating invoice...</span>';
+    btnUpgrade.style.pointerEvents = 'none';
+
+    try {
+      const res = await chrome.runtime.sendMessage({ action: MESSAGE_ACTIONS.CREATE_PAYMENT });
+      if (res && res.ok && res.invoiceUrl) {
+        chrome.tabs.create({ url: res.invoiceUrl });
+      } else {
+        chrome.tabs.create({ url: btnUpgrade.href || res?.fallbackUrl || NOWPAYMENTS_PAYMENT_URL });
+      }
+    } catch (err) {
+      console.warn('[BulkGrab Popup] Payment creation failed, opening fallback:', err);
+      chrome.tabs.create({ url: btnUpgrade.href || NOWPAYMENTS_PAYMENT_URL });
+    } finally {
+      btnUpgrade.innerHTML = originalContent;
+      btnUpgrade.style.pointerEvents = '';
+    }
+  });
+
   updatePlanUI();
 
   // Watch for storage changes in real-time

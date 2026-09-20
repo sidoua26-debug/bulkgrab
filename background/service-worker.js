@@ -9,6 +9,8 @@ import {
   MESSAGE_ACTIONS, 
   FREE_DOWNLOAD_LIMIT,
   NOWPAYMENTS_WORKER_URL,
+  NOWPAYMENTS_WORKER_CREATE_PAYMENT_URL,
+  NOWPAYMENTS_PAYMENT_URL,
   NOWPAYMENTS_API_BASE 
 } from '../utils/constants.js';
 
@@ -258,6 +260,53 @@ export async function resetLicense() {
   broadcastLicenseChange('free');
 
   return { valid: true, status: 'free', message: 'License reset to Free tier.' };
+}
+
+/**
+ * Create a dynamic payment invoice via Cloudflare Worker -> NOWPayments Payments API.
+ */
+export async function createPaymentInvoice() {
+  const isPlaceholderWorker = !NOWPAYMENTS_WORKER_CREATE_PAYMENT_URL || NOWPAYMENTS_WORKER_CREATE_PAYMENT_URL.includes('YOUR_SUBDOMAIN');
+
+  if (isPlaceholderWorker) {
+    // Mock dynamic generation for tests / offline mode
+    const mockPaymentId = '5829' + Math.floor(100000 + Math.random() * 900000);
+    const mockUrl = `https://nowpayments.io/payment/?iid=${mockPaymentId}`;
+    await chrome.storage.local.set({ [STORAGE_KEYS.PENDING_PAYMENT_ID]: mockPaymentId });
+    return {
+      ok: true,
+      invoiceUrl: mockUrl,
+      paymentId: mockPaymentId,
+      orderId: `BG_PRO_TEST_${Date.now()}`
+    };
+  }
+
+  try {
+    const res = await fetch(NOWPAYMENTS_WORKER_CREATE_PAYMENT_URL, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json' }
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    if (data.ok && data.invoiceUrl) {
+      if (data.paymentId) {
+        await chrome.storage.local.set({ [STORAGE_KEYS.PENDING_PAYMENT_ID]: data.paymentId });
+      }
+      return data;
+    }
+    throw new Error(data.error || 'Failed to create invoice');
+  } catch (err) {
+    console.warn('[BulkGrab Service Worker] Dynamic invoice creation failed:', err);
+    return {
+      ok: false,
+      error: err.message,
+      fallbackUrl: NOWPAYMENTS_PAYMENT_URL
+    };
+  }
 }
 
 /**
@@ -755,6 +804,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } catch (err) {
         console.error('[BulkGrab Service Worker] CREATE_ZIP error:', err);
         sendResponse({ status: 'error', message: err.message });
+      }
+    })();
+    return true;
+  }
+
+  // 12. Create dynamic payment invoice
+  if (message.action === MESSAGE_ACTIONS.CREATE_PAYMENT) {
+    (async () => {
+      try {
+        const result = await createPaymentInvoice();
+        sendResponse(result);
+      } catch (err) {
+        console.error('[BulkGrab Service Worker] CREATE_PAYMENT error:', err);
+        sendResponse({ ok: false, error: err.message, fallbackUrl: NOWPAYMENTS_PAYMENT_URL });
       }
     })();
     return true;

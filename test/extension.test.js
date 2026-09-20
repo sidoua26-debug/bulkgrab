@@ -880,6 +880,33 @@ async function runTests() {
       await optionsPage.close();
     });
 
+    // =========================================================================
+    // TEST 16: Dynamic payment creation generates fresh invoice and Payment ID
+    // =========================================================================
+    await test('CREATE_PAYMENT dynamically generates a fresh invoice URL and Payment ID', async () => {
+      const page = await browser.newPage();
+      await page.goto(`chrome-extension://${extId}/options/options.html`, { waitUntil: 'domcontentloaded' });
+
+      const createResult = await page.evaluate(async () => {
+        return await chrome.runtime.sendMessage({
+          action: 'BULKGRAB_CREATE_PAYMENT'
+        });
+      });
+
+      assert.strictEqual(createResult.ok, true, 'Dynamic payment creation should return ok: true');
+      assert(createResult.invoiceUrl && createResult.invoiceUrl.includes('nowpayments.io'), 'Should return a valid NOWPayments invoice URL');
+      assert(createResult.paymentId && createResult.paymentId.length > 0, 'Should return a generated payment ID');
+
+      // Verify pendingPaymentId was stored
+      const sw = await swTarget.worker();
+      const storage = await sw.evaluate(async () => {
+        return await chrome.storage.local.get(['pendingPaymentId']);
+      });
+      assert.strictEqual(storage.pendingPaymentId, createResult.paymentId, 'pendingPaymentId must be saved in storage');
+
+      await page.close();
+    });
+
   } finally {
     if (browser) await browser.close();
     if (server) server.close();
