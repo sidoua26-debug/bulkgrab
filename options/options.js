@@ -5,15 +5,13 @@
 
 import { MESSAGE_ACTIONS, FREE_DOWNLOAD_LIMIT } from '../utils/constants.js';
 
-document.addEventListener('DOMContentLoaded', async () => {
+async function init() {
   const tierBadge = document.getElementById('tier-badge');
   const tierDescription = document.getElementById('tier-description');
   const sessionInfoBox = document.getElementById('session-info-box');
   const activeSessionId = document.getElementById('active-session-id');
   const paymentIdInput = document.getElementById('payment-id-input') || document.getElementById('charge-id-input') || document.getElementById('session-id-input');
   const btnActivate = document.getElementById('btn-activate');
-  const btnReset = document.getElementById('btn-reset');
-  const btnResetQuota = document.getElementById('btn-reset-quota');
   const statusMsg = document.getElementById('status-message');
 
   function showMessage(text, type = 'success') {
@@ -29,11 +27,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   const permBadge = document.getElementById('perm-badge');
   const btnTogglePerm = document.getElementById('btn-toggle-perm');
 
+  let currentRefreshId = 0;
+
   // Render status in UI
   async function refreshUI() {
+    const refreshId = ++currentRefreshId;
     hideMessage();
     try {
       const res = await chrome.runtime.sendMessage({ action: MESSAGE_ACTIONS.GET_STATUS });
+      if (refreshId !== currentRefreshId) {
+        return; // Discard stale response
+      }
       if (res && res.status === 'ok') {
         const isPro = res.licenseStatus === 'pro';
 
@@ -103,6 +107,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await refreshUI();
 
+  // Listen for storage changes so UI remains in sync when license is modified or reset
+  if (chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName === 'local' || areaName === 'session') {
+        refreshUI();
+      }
+    });
+  }
+
+  // Listen for runtime broadcast messages
+  if (chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.action === MESSAGE_ACTIONS.LICENSE_UPDATED) {
+        refreshUI();
+      }
+    });
+  }
+
   // Activate Pro button
   btnActivate.addEventListener('click', async () => {
     const paymentId = paymentIdInput ? paymentIdInput.value.trim() : '';
@@ -135,30 +157,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       btnActivate.textContent = 'Activate Pro';
     }
   });
+}
 
-  // Reset to Free Tier button
-  btnReset.addEventListener('click', async () => {
-    try {
-      const res = await chrome.runtime.sendMessage({ action: MESSAGE_ACTIONS.RESET_LICENSE });
-      if (res && res.valid) {
-        showMessage('License successfully reset to Free tier.', 'success');
-        await refreshUI();
-      }
-    } catch (err) {
-      showMessage(`Reset error: ${err.message}`, 'error');
-    }
-  });
-
-  // Reset session quota button
-  btnResetQuota.addEventListener('click', async () => {
-    try {
-      const res = await chrome.runtime.sendMessage({ action: MESSAGE_ACTIONS.RESET_SESSION_QUOTA });
-      if (res && res.status === 'ok') {
-        showMessage('Session download count reset to 0.', 'success');
-        await refreshUI();
-      }
-    } catch (err) {
-      showMessage(`Quota reset error: ${err.message}`, 'error');
-    }
-  });
-});
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}

@@ -72,7 +72,35 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
  * Evaluate NOWPayments payment status object and update storage if finished
  */
 async function evaluatePaymentStatus(data, paymentId) {
+  // If data was already validated or rejected by the worker
+  if (data.valid === false && data.message === 'This payment is not a BulkGrab Pro purchase.') {
+    return data;
+  }
+
   const status = (data.payment_status || '').toLowerCase();
+  const orderId = data.orderId || data.order_id ? String(data.orderId || data.order_id) : null;
+  const priceAmount = (data.priceAmount !== undefined && data.priceAmount !== null && !isNaN(Number(data.priceAmount)))
+    ? Number(data.priceAmount)
+    : (data.price_amount !== undefined && data.price_amount !== null && !isNaN(Number(data.price_amount)) ? Number(data.price_amount) : null);
+  const priceCurrency = (data.priceCurrency || data.price_currency) ? String(data.priceCurrency || data.price_currency).toLowerCase() : null;
+
+  // Harden check: A payment only counts as a BulkGrab Pro purchase if:
+  // - order_id starts with "BG_PRO_"
+  // - price_currency is 'usd' and price_amount is at least 9.99
+  const isBulkGrabOrder = Boolean(orderId && orderId.startsWith('BG_PRO_'));
+  const isBulkGrabPrice = priceCurrency === 'usd' && priceAmount !== null && priceAmount >= 9.99;
+
+  if (!isBulkGrabOrder || !isBulkGrabPrice) {
+    return {
+      valid: false,
+      message: 'This payment is not a BulkGrab Pro purchase.',
+      error: 'This payment is not a BulkGrab Pro purchase.',
+      orderId,
+      priceAmount,
+      priceCurrency,
+      payment_status: status
+    };
+  }
 
   // 1. Finished: Full payment confirmed
   if (status === 'finished') {
@@ -88,6 +116,9 @@ async function evaluatePaymentStatus(data, paymentId) {
       status: 'pro',
       payment_status: 'finished',
       paymentId: String(paymentId),
+      orderId,
+      priceAmount,
+      priceCurrency,
       actuallyPaid: data.actually_paid,
       payCurrency: data.pay_currency,
       message: 'NOWPayments crypto payment confirmed! Pro tier activated.'
@@ -101,6 +132,9 @@ async function evaluatePaymentStatus(data, paymentId) {
       pending: true,
       payment_status: 'waiting',
       paymentId: String(paymentId),
+      orderId,
+      priceAmount,
+      priceCurrency,
       error: 'Payment is waiting for funds. If you just sent crypto, please allow a moment for the transaction to be detected on the network.'
     };
   }
@@ -112,6 +146,9 @@ async function evaluatePaymentStatus(data, paymentId) {
       pending: true,
       payment_status: 'confirming',
       paymentId: String(paymentId),
+      orderId,
+      priceAmount,
+      priceCurrency,
       error: 'Transaction detected on the blockchain! Awaiting network block confirmations (usually 2–5 minutes). Please try again shortly.'
     };
   }
@@ -123,6 +160,9 @@ async function evaluatePaymentStatus(data, paymentId) {
       pending: true,
       payment_status: status,
       paymentId: String(paymentId),
+      orderId,
+      priceAmount,
+      priceCurrency,
       error: 'Payment confirmed on blockchain and finalizing payout. Please re-verify in 1–2 minutes.'
     };
   }
@@ -133,6 +173,9 @@ async function evaluatePaymentStatus(data, paymentId) {
       valid: false,
       payment_status: 'partially_paid',
       paymentId: String(paymentId),
+      orderId,
+      priceAmount,
+      priceCurrency,
       error: `Payment was partially paid (received ${data.actually_paid || 0} ${data.pay_currency || ''} of required ${data.pay_amount || ''} ${data.pay_currency || ''}). Please check your NOWPayments receipt to pay the remaining balance.`
     };
   }
@@ -143,6 +186,9 @@ async function evaluatePaymentStatus(data, paymentId) {
       valid: false,
       payment_status: status,
       paymentId: String(paymentId),
+      orderId,
+      priceAmount,
+      priceCurrency,
       error: `Payment has ${status}. Please initiate a new payment link.`
     };
   }
@@ -153,15 +199,22 @@ async function evaluatePaymentStatus(data, paymentId) {
       valid: false,
       payment_status: 'refunded',
       paymentId: String(paymentId),
+      orderId,
+      priceAmount,
+      priceCurrency,
       error: 'This payment was refunded.'
     };
   }
 
   return {
     valid: false,
-    payment_status: status,
+    message: 'This payment is not a BulkGrab Pro purchase.',
+    error: `Payment status is currently ${status}.`,
     paymentId: String(paymentId),
-    error: `Payment status is currently ${status}.`
+    orderId,
+    priceAmount,
+    priceCurrency,
+    payment_status: status
   };
 }
 
@@ -226,14 +279,21 @@ export async function verifyLicense(paymentId, options = {}) {
     else if (trimmedId.includes('partially_paid') || trimmedId.includes('underpaid')) mockStatus = 'partially_paid';
     else if (trimmedId.includes('failed') || trimmedId.includes('expired')) mockStatus = 'failed';
     else if (trimmedId.includes('refunded')) mockStatus = 'refunded';
+    const mockOrderId = trimmedId.includes('unrelated') ? 'OTHER_ORDER_999' : 'BG_PRO_mock_test';
+    const mockPrice = trimmedId.includes('low_price') ? 1.00 : 9.99;
+    const mockCurrency = trimmedId.includes('wrong_currency') ? 'eur' : 'usd';
 
     return await evaluatePaymentStatus({
       payment_id: trimmedId,
       payment_status: mockStatus,
-      price_amount: 9.99,
-      price_currency: 'usd',
-      actually_paid: mockStatus === 'partially_paid' ? 4.99 : 9.99,
-      pay_amount: 9.99,
+      order_id: mockOrderId,
+      orderId: mockOrderId,
+      price_amount: mockPrice,
+      priceAmount: mockPrice,
+      price_currency: mockCurrency,
+      priceCurrency: mockCurrency,
+      actually_paid: mockStatus === 'partially_paid' ? 4.99 : mockPrice,
+      pay_amount: mockPrice,
       pay_currency: 'usdtbsc'
     }, trimmedId);
   }
@@ -268,12 +328,18 @@ export async function verifyLicense(paymentId, options = {}) {
         return {
           valid: false,
           notFound: true,
+          orderId: errJson?.orderId || null,
+          priceAmount: errJson?.priceAmount || null,
+          priceCurrency: errJson?.priceCurrency || null,
           error: 'Payment ID not found, please check you copied the Payment ID from the payment page.'
         };
       }
 
       return {
         valid: false,
+        orderId: errJson?.orderId || null,
+        priceAmount: errJson?.priceAmount || null,
+        priceCurrency: errJson?.priceCurrency || null,
         error: errJson?.error || errJson?.message || `Payment verification returned HTTP ${res.status}`
       };
     }
@@ -283,8 +349,14 @@ export async function verifyLicense(paymentId, options = {}) {
       return {
         valid: false,
         notFound: true,
+        orderId: data?.orderId || null,
+        priceAmount: data?.priceAmount || null,
+        priceCurrency: data?.priceCurrency || null,
         error: 'Payment ID not found, please check you copied the Payment ID from the payment page.'
       };
+    }
+    if (data?.valid === false) {
+      return data;
     }
     return await evaluatePaymentStatus(data, trimmedId);
 
@@ -386,6 +458,11 @@ async function broadcastLicenseChange(newStatus) {
         }).catch(() => {});
       }
     }
+    // Also notify internal extension pages (options, popup)
+    chrome.runtime.sendMessage({
+      action: MESSAGE_ACTIONS.LICENSE_UPDATED,
+      licenseStatus: newStatus
+    }).catch(() => {});
   } catch (_) {}
 }
 
@@ -736,9 +813,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // 3. Reset license (for testing)
+  // 3. Reset license (strictly for test harness)
   if (message.action === MESSAGE_ACTIONS.RESET_LICENSE) {
     (async () => {
+      const storage = await chrome.storage.local.get('__testMockVerification__');
+      if (storage.__testMockVerification__ !== true) {
+        sendResponse({ status: 'error', message: 'Unauthorized action' });
+        return;
+      }
       const result = await resetLicense();
       sendResponse(result);
     })();
@@ -768,9 +850,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // 6. Reset session quota (for testing)
+  // 6. Reset session quota (strictly for test harness)
   if (message.action === MESSAGE_ACTIONS.RESET_SESSION_QUOTA) {
     (async () => {
+      const storage = await chrome.storage.local.get('__testMockVerification__');
+      if (storage.__testMockVerification__ !== true) {
+        sendResponse({ status: 'error', message: 'Unauthorized action' });
+        return;
+      }
       if (chrome.storage.session) {
         await chrome.storage.session.set({ [STORAGE_KEYS.SESSION_DOWNLOADS]: 0 });
       }

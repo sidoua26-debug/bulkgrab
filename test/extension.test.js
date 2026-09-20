@@ -396,16 +396,21 @@ async function runTests() {
     });
 
     // =========================================================================
-    // TEST 8: Options page resets license back to Free tier
+    // TEST 8: Authorized test harness resets license back to Free tier
     // =========================================================================
-    await test('Options page resets license back to Free tier', async () => {
+    await test('Authorized test harness resets license back to Free tier', async () => {
       const optionsPage = await browser.newPage();
       await optionsPage.goto(`chrome-extension://${extId}/options/options.html`, { waitUntil: 'domcontentloaded' });
 
-      // Click Reset to Free Tier button
-      await optionsPage.click('#btn-reset');
+      // Reset license via authorized test harness message
+      const resetRes = await optionsPage.evaluate(async () => {
+        const res = await chrome.runtime.sendMessage({ action: 'BULKGRAB_RESET_LICENSE' });
+        location.reload();
+        return res;
+      });
+      assert.strictEqual(resetRes.valid, true, 'Reset license should return valid: true');
 
-      // Wait for UI to update back to Free Plan
+      // Wait for UI to update back to Free Plan via storage listener
       await optionsPage.waitForFunction(() => {
         return document.getElementById('tier-badge')?.textContent.includes('Free Plan');
       }, { timeout: 5000 });
@@ -847,7 +852,9 @@ async function runTests() {
 
       // 6. UI test via Options page
       // Reset to free first
-      await optionsPage.click('#btn-reset');
+      await optionsPage.evaluate(async () => {
+        await chrome.runtime.sendMessage({ action: 'BULKGRAB_RESET_LICENSE' });
+      });
       await optionsPage.waitForFunction(() => {
         return document.getElementById('tier-badge')?.textContent.includes('Free Plan');
       });
@@ -882,7 +889,9 @@ async function runTests() {
       assert.strictEqual(storageAfterValid.nowpaymentsPaymentId, 'test_verified_payment_1', 'Stored paymentId should match');
 
       // Reset back to free
-      await optionsPage.click('#btn-reset');
+      await optionsPage.evaluate(async () => {
+        await chrome.runtime.sendMessage({ action: 'BULKGRAB_RESET_LICENSE' });
+      });
       await optionsPage.close();
     });
 
@@ -999,12 +1008,175 @@ async function runTests() {
       assert.strictEqual(unflaggedRes.valid, false, 'Without test flag, test_ IDs must be rejected by live worker');
       assert.strictEqual(unflaggedRes.notFound, true, 'Live worker returns notFound for non-existent transactions');
 
+      // Security check: Verify unauthenticated attempts to reset license or session quota are rejected
+      const resetLicRes = await page.evaluate(async () => {
+        return await chrome.runtime.sendMessage({
+          action: 'BULKGRAB_RESET_LICENSE'
+        });
+      });
+      assert.strictEqual(resetLicRes.status, 'error', 'Reset license must fail when test flag is absent');
+      assert.strictEqual(resetLicRes.message, 'Unauthorized action', 'Reset license must return Unauthorized action');
+
+      const resetQuotaRes = await page.evaluate(async () => {
+        return await chrome.runtime.sendMessage({
+          action: 'BULKGRAB_RESET_SESSION_QUOTA'
+        });
+      });
+      assert.strictEqual(resetQuotaRes.status, 'error', 'Reset quota must fail when test flag is absent');
+      assert.strictEqual(resetQuotaRes.message, 'Unauthorized action', 'Reset quota must return Unauthorized action');
+
+      // 6. Confirm testing buttons are completely removed from Options DOM
+      const resetBtnExists = await page.$('#btn-reset');
+      assert.strictEqual(resetBtnExists, null, 'btn-reset button must not exist in options DOM');
+      const resetQuotaBtnExists = await page.$('#btn-reset-quota');
+      assert.strictEqual(resetQuotaBtnExists, null, 'btn-reset-quota button must not exist in options DOM');
+
       // Re-enable test flag for safety
       await sw.evaluate(async () => {
         await chrome.storage.local.set({ __testMockVerification__: true });
       });
 
       await page.close();
+    });
+
+    // =========================================================================
+    // TEST 18: Hardened /api/verify-payment rejects non-BulkGrab purchases and validates orderId & pricing
+    // =========================================================================
+    await test('Hardened /api/verify-payment requires BG_PRO_ order_id, finished status, and >= $9.99 USD', async () => {
+      const { default: worker } = await import('../cloudflare-worker/worker.js');
+
+      const mockEnv = {
+        NOWPAYMENTS_API_KEY: 'test_key_123'
+      };
+
+      async function testVerifyWithMockData(mockData) {
+        const origFetch = global.fetch;
+        global.fetch = async (url) => {
+          if (url.includes('/payment/')) {
+            return {
+              ok: true,
+              status: 200,
+              json: async () => mockData,
+              text: async () => JSON.stringify(mockData)
+            };
+          }
+          return origFetch(url);
+        };
+
+        try {
+          const req = new Request('https://worker.local/api/verify-payment?payment_id=5829104812');
+          const res = await worker.fetch(req, mockEnv);
+          return await res.json();
+        } finally {
+          global.fetch = origFetch;
+        }
+      }
+
+      // 1. Valid purchase: finished, BG_PRO_ prefix, USD, $9.99
+      const validRes = await testVerifyWithMockData({
+        payment_id: 5829104812,
+        payment_status: 'finished',
+        order_id: 'BG_PRO_1726859345_abcde',
+        price_amount: '9.99',
+        price_currency: 'usd',
+        pay_address: '0x1234567890'
+      });
+      assert.strictEqual(validRes.valid, true, 'Valid payment must return valid: true');
+      assert.strictEqual(validRes.status, 'pro', 'Valid payment must set status: pro');
+      assert.strictEqual(validRes.orderId, 'BG_PRO_1726859345_abcde');
+      assert.strictEqual(validRes.priceAmount, 9.99);
+      assert.strictEqual(validRes.priceCurrency, 'usd');
+
+      // 2. Finished but unrelated order_id (from another store/invoice)
+      const unrelatedFinished = await testVerifyWithMockData({
+        payment_id: 5829104812,
+        payment_status: 'finished',
+        order_id: 'OTHER_STORE_PURCHASE_999',
+        price_amount: 9.99,
+        price_currency: 'usd'
+      });
+      assert.strictEqual(unrelatedFinished.valid, false);
+      assert.strictEqual(unrelatedFinished.message, 'This payment is not a BulkGrab Pro purchase.');
+      assert.strictEqual(unrelatedFinished.orderId, 'OTHER_STORE_PURCHASE_999');
+      assert.strictEqual(unrelatedFinished.priceAmount, 9.99);
+      assert.strictEqual(unrelatedFinished.priceCurrency, 'usd');
+
+      // 3. Waiting but unrelated order_id: Must NOT return pending!
+      const unrelatedWaiting = await testVerifyWithMockData({
+        payment_id: 5829104812,
+        payment_status: 'waiting',
+        order_id: 'OTHER_STORE_WAITING_111',
+        price_amount: 9.99,
+        price_currency: 'usd'
+      });
+      assert.strictEqual(unrelatedWaiting.valid, false);
+      assert.strictEqual(unrelatedWaiting.pending, undefined, 'Unrelated payment must never look like pending');
+      assert.strictEqual(unrelatedWaiting.message, 'This payment is not a BulkGrab Pro purchase.');
+
+      // 4. Missing order_id
+      const missingOrder = await testVerifyWithMockData({
+        payment_id: 5829104812,
+        payment_status: 'finished',
+        price_amount: 9.99,
+        price_currency: 'usd'
+      });
+      assert.strictEqual(missingOrder.valid, false);
+      assert.strictEqual(missingOrder.message, 'This payment is not a BulkGrab Pro purchase.');
+      assert.strictEqual(missingOrder.orderId, null);
+
+      // 5. Wrong currency (e.g. eur)
+      const wrongCurrency = await testVerifyWithMockData({
+        payment_id: 5829104812,
+        payment_status: 'finished',
+        order_id: 'BG_PRO_123',
+        price_amount: 9.99,
+        price_currency: 'eur'
+      });
+      assert.strictEqual(wrongCurrency.valid, false);
+      assert.strictEqual(wrongCurrency.message, 'This payment is not a BulkGrab Pro purchase.');
+      assert.strictEqual(wrongCurrency.priceCurrency, 'eur');
+
+      // 6. Insufficient price amount (< 9.99)
+      const lowPrice = await testVerifyWithMockData({
+        payment_id: 5829104812,
+        payment_status: 'finished',
+        order_id: 'BG_PRO_123',
+        price_amount: '5.00',
+        price_currency: 'usd'
+      });
+      assert.strictEqual(lowPrice.valid, false);
+      assert.strictEqual(lowPrice.message, 'This payment is not a BulkGrab Pro purchase.');
+      assert.strictEqual(lowPrice.priceAmount, 5);
+
+      // 7. Legitimate pending purchase with BG_PRO_ prefix and $9.99 USD
+      const validPending = await testVerifyWithMockData({
+        payment_id: 5829104812,
+        payment_status: 'waiting',
+        order_id: 'BG_PRO_12345',
+        price_amount: 9.99,
+        price_currency: 'usd'
+      });
+      assert.strictEqual(validPending.valid, false);
+      assert.strictEqual(validPending.pending, true);
+      assert.strictEqual(validPending.payment_status, 'waiting');
+      assert.strictEqual(validPending.orderId, 'BG_PRO_12345');
+      assert.strictEqual(validPending.priceAmount, 9.99);
+      assert.strictEqual(validPending.priceCurrency, 'usd');
+
+      // 8. Extension UI / service worker integration test with unrelated payment
+      const optionsPage = await browser.newPage();
+      await optionsPage.goto(`chrome-extension://${extId}/options/options.html`, { waitUntil: 'domcontentloaded' });
+
+      const unrelatedResult = await optionsPage.evaluate(async () => {
+        return await chrome.runtime.sendMessage({
+          action: 'BULKGRAB_VERIFY_LICENSE',
+          paymentId: 'test_unrelated_order_1'
+        });
+      });
+      assert.strictEqual(unrelatedResult.valid, false);
+      assert.strictEqual(unrelatedResult.message, 'This payment is not a BulkGrab Pro purchase.');
+
+      await optionsPage.close();
     });
 
   } finally {

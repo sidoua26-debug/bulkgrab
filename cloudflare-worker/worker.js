@@ -96,7 +96,11 @@ export default {
       if (!paymentId) {
         return new Response(JSON.stringify({
           valid: false,
-          error: 'Please provide a valid payment_id query parameter.'
+          orderId: null,
+          priceAmount: null,
+          priceCurrency: null,
+          error: 'Please provide a valid payment_id query parameter.',
+          message: 'Please provide a valid payment_id query parameter.'
         }), { status: 400, headers: CORS_HEADERS });
       }
 
@@ -104,7 +108,11 @@ export default {
         console.error('[Worker] NOWPAYMENTS_API_KEY secret is not configured!');
         return new Response(JSON.stringify({
           valid: false,
-          error: 'Worker configuration error: NOWPAYMENTS_API_KEY secret is not set.'
+          orderId: null,
+          priceAmount: null,
+          priceCurrency: null,
+          error: 'Worker configuration error: NOWPAYMENTS_API_KEY secret is not set.',
+          message: 'Worker configuration error: NOWPAYMENTS_API_KEY secret is not set.'
         }), { status: 500, headers: CORS_HEADERS });
       }
 
@@ -127,18 +135,51 @@ export default {
             return new Response(JSON.stringify({
               valid: false,
               notFound: true,
+              orderId: null,
+              priceAmount: null,
+              priceCurrency: null,
               error: 'Payment ID not found, please check you copied the Payment ID from the payment page.'
             }), { status: 404, headers: CORS_HEADERS });
           }
 
           return new Response(JSON.stringify({
             valid: false,
+            orderId: null,
+            priceAmount: null,
+            priceCurrency: null,
             error: errJson?.message || `NOWPayments API returned HTTP ${nowpaymentsRes.status}`
           }), { status: nowpaymentsRes.status, headers: CORS_HEADERS });
         }
 
         const data = await nowpaymentsRes.json();
         const status = (data.payment_status || '').toLowerCase();
+        const orderId = data.order_id ? String(data.order_id) : null;
+        const priceAmount = (data.price_amount !== undefined && data.price_amount !== null && !isNaN(Number(data.price_amount)))
+          ? Number(data.price_amount)
+          : null;
+        const priceCurrency = data.price_currency ? String(data.price_currency).toLowerCase() : null;
+
+        // Harden check: A payment only counts as a BulkGrab Pro purchase if ALL of these are true:
+        // - payment_status is 'finished'
+        // - order_id starts with "BG_PRO_" (created by our /api/create-payment)
+        // - price_currency is 'usd' and price_amount is at least 9.99 (compare as numbers)
+        //
+        // Apply order_id check before pending statuses (waiting, confirming...)
+        // so unrelated payments never look like pending purchases.
+        const isBulkGrabOrder = Boolean(orderId && orderId.startsWith('BG_PRO_'));
+        const isBulkGrabPrice = priceCurrency === 'usd' && priceAmount !== null && priceAmount >= 9.99;
+
+        if (!isBulkGrabOrder || !isBulkGrabPrice) {
+          return new Response(JSON.stringify({
+            valid: false,
+            message: 'This payment is not a BulkGrab Pro purchase.',
+            error: 'This payment is not a BulkGrab Pro purchase.',
+            orderId,
+            priceAmount,
+            priceCurrency,
+            payment_status: status
+          }), { status: 200, headers: CORS_HEADERS });
+        }
 
         // 1. Finished: Payment successfully completed and confirmed
         if (status === 'finished') {
@@ -147,9 +188,10 @@ export default {
             status: 'pro',
             payment_status: 'finished',
             paymentId: data.payment_id,
+            orderId,
+            priceAmount,
+            priceCurrency,
             payAddress: data.pay_address,
-            priceAmount: data.price_amount,
-            priceCurrency: data.price_currency,
             actuallyPaid: data.actually_paid,
             payCurrency: data.pay_currency,
             message: 'NOWPayments crypto payment confirmed! Pro tier activated.'
@@ -162,6 +204,9 @@ export default {
             valid: false,
             pending: true,
             payment_status: 'waiting',
+            orderId,
+            priceAmount,
+            priceCurrency,
             error: 'Payment is waiting for funds. If you just sent crypto, please allow a moment for the transaction to be detected on the network.'
           }), { status: 200, headers: CORS_HEADERS });
         }
@@ -172,6 +217,9 @@ export default {
             valid: false,
             pending: true,
             payment_status: 'confirming',
+            orderId,
+            priceAmount,
+            priceCurrency,
             error: 'Transaction detected on the blockchain! Awaiting network block confirmations (usually 2–5 minutes). Please try again shortly.'
           }), { status: 200, headers: CORS_HEADERS });
         }
@@ -182,6 +230,9 @@ export default {
             valid: false,
             pending: true,
             payment_status: status,
+            orderId,
+            priceAmount,
+            priceCurrency,
             error: 'Payment confirmed on blockchain and finalizing payout. Please re-verify in 1–2 minutes.'
           }), { status: 200, headers: CORS_HEADERS });
         }
@@ -191,6 +242,9 @@ export default {
           return new Response(JSON.stringify({
             valid: false,
             payment_status: 'partially_paid',
+            orderId,
+            priceAmount,
+            priceCurrency,
             error: `Payment was partially paid (received ${data.actually_paid || 0} ${data.pay_currency || ''} of required ${data.pay_amount || ''} ${data.pay_currency || ''}). Please check your NOWPayments invoice to complete payment.`
           }), { status: 200, headers: CORS_HEADERS });
         }
@@ -200,6 +254,9 @@ export default {
           return new Response(JSON.stringify({
             valid: false,
             payment_status: status,
+            orderId,
+            priceAmount,
+            priceCurrency,
             error: `Payment has ${status}. Please initiate a new payment link.`
           }), { status: 200, headers: CORS_HEADERS });
         }
@@ -208,6 +265,9 @@ export default {
           return new Response(JSON.stringify({
             valid: false,
             payment_status: 'refunded',
+            orderId,
+            priceAmount,
+            priceCurrency,
             error: 'This payment was refunded.'
           }), { status: 200, headers: CORS_HEADERS });
         }
@@ -215,14 +275,21 @@ export default {
         // Fallback for any unknown status
         return new Response(JSON.stringify({
           valid: false,
-          payment_status: status,
-          error: `Current payment status: ${status}. Please try again later.`
+          message: 'This payment is not a BulkGrab Pro purchase.',
+          error: `Current payment status: ${status}. Please try again later.`,
+          orderId,
+          priceAmount,
+          priceCurrency,
+          payment_status: status
         }), { status: 200, headers: CORS_HEADERS });
 
       } catch (err) {
         console.error('[Worker] Verification error:', err);
         return new Response(JSON.stringify({
           valid: false,
+          orderId: null,
+          priceAmount: null,
+          priceCurrency: null,
           error: `Verification error: ${err.message}`
         }), { status: 500, headers: CORS_HEADERS });
       }
