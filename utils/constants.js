@@ -52,9 +52,10 @@ export const FREE_DOWNLOAD_LIMIT = 7;
 
 // Storage keys for chrome.storage
 export const STORAGE_KEYS = {
-  LICENSE_STATUS: 'licenseStatus',           // 'free' | 'pro'
-  SESSION_DOWNLOADS: 'sessionDownloadCount', // integer (stored in chrome.storage.session)
-  COINBASE_CHARGE_ID: 'coinbaseChargeId'     // string (Coinbase Commerce charge ID / code)
+  LICENSE_STATUS: 'licenseStatus',                 // 'free' | 'pro'
+  SESSION_DOWNLOADS: 'sessionDownloadCount',       // integer (stored in chrome.storage.session)
+  NOWPAYMENTS_PAYMENT_ID: 'nowpaymentsPaymentId', // string (NOWPayments Payment ID)
+  PAYMENT_ID: 'nowpaymentsPaymentId'               // convenience alias
 };
 
 // Message actions for runtime communication between components
@@ -78,6 +79,14 @@ export const MESSAGE_ACTIONS = {
   CREATE_ZIP: 'BULKGRAB_CREATE_ZIP'
 };
 
-// Payment link placeholder for Pro tier upgrade
-export const COINBASE_CHECKOUT_URL = 'https://commerce.coinbase.com/checkout/test_placeholder_bulkgrab';
+// NOWPayments payment link placeholder for Pro tier upgrade ($9.99 fixed price)
+// Create your static payment link in NOWPayments Dashboard -> Payment Links and paste the URL here.
+export const NOWPAYMENTS_PAYMENT_URL = 'https://nowpayments.io/payment/?iid=bulkgrab_pro_upgrade';
+
+// NOWPayments API base URL
+export const NOWPAYMENTS_API_BASE = 'https://api.nowpayments.io/v1';
+
+// Cloudflare Worker backend verification endpoint URL
+// Deploy cloudflare-worker/worker.js and replace with your live workers.dev URL
+export const NOWPAYMENTS_WORKER_URL = 'https://bulkgrab-licensing.YOUR_SUBDOMAIN.workers.dev/api/verify-payment';
 

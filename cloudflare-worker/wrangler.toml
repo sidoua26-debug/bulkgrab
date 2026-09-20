@@ -1,0 +1,14 @@
+name = "bulkgrab-licensing"
+main = "worker.js"
+compatibility_date = "2024-09-01"
+
+# Production environment configuration
+# Secrets to add via CLI or Cloudflare Dashboard:
+# - NOWPAYMENTS_API_KEY
+# - NOWPAYMENTS_IPN_KEY
+#
+# To deploy via CLI:
+# 1. npx wrangler login
+# 2. npx wrangler secret put NOWPAYMENTS_API_KEY
+# 3. npx wrangler secret put NOWPAYMENTS_IPN_KEY
+# 4. npx wrangler deploy

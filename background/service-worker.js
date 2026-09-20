@@ -4,7 +4,13 @@
  */
 
 import '../assets/vendor/jszip.min.js';
-import { STORAGE_KEYS, MESSAGE_ACTIONS, FREE_DOWNLOAD_LIMIT } from '../utils/constants.js';
+import { 
+  STORAGE_KEYS, 
+  MESSAGE_ACTIONS, 
+  FREE_DOWNLOAD_LIMIT,
+  NOWPAYMENTS_WORKER_URL,
+  NOWPAYMENTS_API_BASE 
+} from '../utils/constants.js';
 
 // Initialize default state on extension install or update
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -14,7 +20,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   if (!existing[STORAGE_KEYS.LICENSE_STATUS]) {
     await chrome.storage.local.set({
       [STORAGE_KEYS.LICENSE_STATUS]: 'free',
-      [STORAGE_KEYS.COINBASE_CHARGE_ID]: ''
+      [STORAGE_KEYS.NOWPAYMENTS_PAYMENT_ID]: ''
     });
     console.log('[BulkGrab Service Worker] Initialized default license status: free');
   }
@@ -41,122 +47,201 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 /**
  * =========================================================================
- * COINBASE COMMERCE LICENSE VERIFICATION STUB
+ * NOWPAYMENTS CRYPTOCURRENCY LICENSE VERIFICATION
  * =========================================================================
  * 
- * REAL CLOUDFLARE WORKER REFERENCE IMPLEMENTATION:
+ * Verifies payment status for BulkGrab Pro upgrades via NOWPayments:
+ * - Production: Proxies verification to your Cloudflare Worker backend
+ *   (NOWPAYMENTS_WORKER_URL) to keep your private NOWPayments API key secure.
+ * - Direct / Test: Supports direct API verification when an API key is provided,
+ *   as well as graceful simulation for automated offline tests.
  * 
- * To protect your Coinbase Commerce API key, requests must be routed through
- * your Cloudflare Worker backend rather than directly in the client extension:
- * 
- * export default {
- *   async fetch(request, env) {
- *     const url = new URL(request.url);
- *     if (url.pathname === '/api/verify-coinbase') {
- *       const chargeId = url.searchParams.get('charge_id');
- *       if (!chargeId) {
- *         return new Response(JSON.stringify({ valid: false, error: 'Missing charge_id' }), {
- *           status: 400,
- *           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
- *         });
- *       }
- * 
- *       try {
- *         // 1. Fetch charge from Coinbase Commerce API
- *         const response = await fetch(`https://api.commerce.coinbase.com/charges/${encodeURIComponent(chargeId)}`, {
- *           method: 'GET',
- *           headers: {
- *             'X-CC-Api-Key': env.COINBASE_COMMERCE_API_KEY,
- *             'X-CC-Version': '2018-03-22',
- *             'Accept': 'application/json'
- *           }
- *         });
- * 
- *         if (!response.ok) {
- *           return new Response(JSON.stringify({ valid: false, error: `Coinbase API returned HTTP ${response.status}` }), {
- *             status: response.status,
- *             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
- *           });
- *         }
- * 
- *         const json = await response.json();
- *         const charge = json.data;
- * 
- *         // 2. Check the charge timeline for COMPLETED status (not PENDING or EXPIRED)
- *         const timeline = charge.timeline || [];
- *         const isCompleted = timeline.some(entry => entry.status === 'COMPLETED') || charge.status === 'COMPLETED';
- *         const isPending = timeline.some(entry => entry.status === 'PENDING') || charge.status === 'PENDING';
- * 
- *         if (!isCompleted) {
- *           if (isPending) {
- *             return new Response(JSON.stringify({
- *               valid: false,
- *               pending: true,
- *               error: 'Crypto payment detected on blockchain but awaiting confirmation. Please try again in 2-5 minutes.'
- *             }), {
- *               headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
- *             });
- *           }
- *           const latestStatus = timeline[timeline.length - 1]?.status || charge.status || 'NEW';
- *           return new Response(JSON.stringify({
- *             valid: false,
- *             error: `Payment is not completed. Current status: ${latestStatus}`
- *           }), {
- *             headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
- *           });
- *         }
- * 
- *         // 3. Only then grant Pro tier
- *         return new Response(JSON.stringify({
- *           valid: true,
- *           status: 'pro',
- *           chargeId: charge.id,
- *           chargeCode: charge.code,
- *           customerEmail: charge.metadata?.customer_email
- *         }), {
- *           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
- *         });
- *       } catch (err) {
- *         return new Response(JSON.stringify({ valid: false, error: err.message }), {
- *           status: 500,
- *           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
- *         });
- *       }
- *     }
- *     return new Response('Not Found', { status: 404 });
- *   }
- * };
+ * Handled NOWPayments payment statuses:
+ * - 'finished': Payment confirmed and completed. Grants Pro license.
+ * - 'waiting': Payment created, awaiting transaction detection. Returns pending status.
+ * - 'confirming': Detected on blockchain, awaiting block confirmations (2-5 mins). Returns pending status.
+ * - 'confirmed' / 'sending': Confirmed on chain, internal payout finalizing. Returns pending status.
+ * - 'partially_paid': Underpaid amount. Returns descriptive error with received vs required amounts.
+ * - 'failed' / 'expired': Failed or expired payment. Returns descriptive error.
+ * - 'refunded': Refunded payment. Returns error.
  */
 
 /**
- * Verify Coinbase Commerce charge ID / code.
- * Stub behavior: accepts any non-empty string as valid.
+ * Evaluate NOWPayments payment status object and update storage if finished
  */
-export async function verifyLicense(chargeId) {
-  if (!chargeId || typeof chargeId !== 'string' || !chargeId.trim()) {
+async function evaluatePaymentStatus(data, paymentId) {
+  const status = (data.payment_status || '').toLowerCase();
+
+  // 1. Finished: Full payment confirmed
+  if (status === 'finished') {
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.LICENSE_STATUS]: 'pro',
+      [STORAGE_KEYS.NOWPAYMENTS_PAYMENT_ID]: String(paymentId)
+    });
+    console.log(`[BulkGrab Service Worker] NOWPayments license verified: ${paymentId} (status: finished)`);
+    broadcastLicenseChange('pro');
+
     return {
-      valid: false,
-      error: 'Please enter a valid Coinbase Commerce charge ID.'
+      valid: true,
+      status: 'pro',
+      payment_status: 'finished',
+      paymentId: String(paymentId),
+      actuallyPaid: data.actually_paid,
+      payCurrency: data.pay_currency,
+      message: 'NOWPayments crypto payment confirmed! Pro tier activated.'
     };
   }
 
-  const trimmed = chargeId.trim();
+  // 2. Waiting: Awaiting deposit from customer
+  if (status === 'waiting') {
+    return {
+      valid: false,
+      pending: true,
+      payment_status: 'waiting',
+      paymentId: String(paymentId),
+      error: 'Payment is waiting for funds. If you just sent crypto, please allow a moment for the transaction to be detected on the network.'
+    };
+  }
 
-  // Stub logic: accepts any non-empty string as valid
-  await chrome.storage.local.set({
-    [STORAGE_KEYS.LICENSE_STATUS]: 'pro',
-    [STORAGE_KEYS.COINBASE_CHARGE_ID]: trimmed
-  });
+  // 3. Confirming: On chain, awaiting block confirmations
+  if (status === 'confirming') {
+    return {
+      valid: false,
+      pending: true,
+      payment_status: 'confirming',
+      paymentId: String(paymentId),
+      error: 'Transaction detected on the blockchain! Awaiting network block confirmations (usually 2–5 minutes). Please try again shortly.'
+    };
+  }
 
-  console.log(`[BulkGrab Service Worker] Coinbase Commerce license stub verified: ${trimmed}`);
-  broadcastLicenseChange('pro');
+  // 4. Confirmed / Sending: Finalizing
+  if (status === 'confirmed' || status === 'sending') {
+    return {
+      valid: false,
+      pending: true,
+      payment_status: status,
+      paymentId: String(paymentId),
+      error: 'Payment confirmed on blockchain and finalizing payout. Please re-verify in 1–2 minutes.'
+    };
+  }
+
+  // 5. Partially paid
+  if (status === 'partially_paid') {
+    return {
+      valid: false,
+      payment_status: 'partially_paid',
+      paymentId: String(paymentId),
+      error: `Payment was partially paid (received ${data.actually_paid || 0} ${data.pay_currency || ''} of required ${data.pay_amount || ''} ${data.pay_currency || ''}). Please check your NOWPayments receipt to pay the remaining balance.`
+    };
+  }
+
+  // 6. Failed / Expired
+  if (status === 'failed' || status === 'expired') {
+    return {
+      valid: false,
+      payment_status: status,
+      paymentId: String(paymentId),
+      error: `Payment has ${status}. Please initiate a new payment link.`
+    };
+  }
+
+  // 7. Refunded
+  if (status === 'refunded') {
+    return {
+      valid: false,
+      payment_status: 'refunded',
+      paymentId: String(paymentId),
+      error: 'This payment was refunded.'
+    };
+  }
 
   return {
-    valid: true,
-    status: 'pro',
-    chargeId: trimmed,
-    message: 'Coinbase Commerce crypto payment confirmed! Pro tier activated.'
+    valid: false,
+    payment_status: status,
+    paymentId: String(paymentId),
+    error: `Payment status is currently ${status}.`
   };
+}
+
+/**
+ * Verify license using NOWPayments Payment ID.
+ * Supports Cloudflare Worker proxy, direct NOWPayments API with x-api-key,
+ * and test mock fallbacks.
+ */
+export async function verifyLicense(paymentId, options = {}) {
+  if (!paymentId || typeof paymentId !== 'string' || !paymentId.trim()) {
+    return {
+      valid: false,
+      error: 'Please enter a valid NOWPayments Payment ID.'
+    };
+  }
+
+  const trimmedId = paymentId.trim();
+
+  // Test / Mock handler (for automated tests or offline development)
+  const isMockId = trimmedId.startsWith('test_') || trimmedId.startsWith('mock_');
+  const isPlaceholderWorker = !NOWPAYMENTS_WORKER_URL || NOWPAYMENTS_WORKER_URL.includes('YOUR_SUBDOMAIN');
+
+  if (isMockId || (isPlaceholderWorker && !options.apiKey)) {
+    // Determine simulated status from mock ID patterns
+    let mockStatus = 'finished';
+    if (trimmedId.includes('waiting')) mockStatus = 'waiting';
+    else if (trimmedId.includes('confirming')) mockStatus = 'confirming';
+    else if (trimmedId.includes('partially_paid') || trimmedId.includes('underpaid')) mockStatus = 'partially_paid';
+    else if (trimmedId.includes('failed') || trimmedId.includes('expired')) mockStatus = 'failed';
+    else if (trimmedId.includes('refunded')) mockStatus = 'refunded';
+
+    return await evaluatePaymentStatus({
+      payment_id: trimmedId,
+      payment_status: mockStatus,
+      price_amount: 9.99,
+      price_currency: 'usd',
+      actually_paid: mockStatus === 'partially_paid' ? 4.99 : 9.99,
+      pay_amount: 9.99,
+      pay_currency: 'usdtbsc'
+    }, trimmedId);
+  }
+
+  try {
+    let res;
+    // Option A: Direct API call if x-api-key provided in options (e.g. for developer debugging)
+    if (options.apiKey) {
+      res = await fetch(`${NOWPAYMENTS_API_BASE}/payment/${encodeURIComponent(trimmedId)}`, {
+        method: 'GET',
+        headers: {
+          'x-api-key': options.apiKey,
+          'Accept': 'application/json'
+        }
+      });
+    } else {
+      // Option B: Query Cloudflare Worker backend proxy (production)
+      const verifyEndpoint = `${NOWPAYMENTS_WORKER_URL}?payment_id=${encodeURIComponent(trimmedId)}`;
+      res = await fetch(verifyEndpoint, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+    }
+
+    if (!res.ok) {
+      const errText = await res.text();
+      let errJson;
+      try { errJson = JSON.parse(errText); } catch (_) {}
+      return {
+        valid: false,
+        error: errJson?.error || errJson?.message || `Payment verification returned HTTP ${res.status}`
+      };
+    }
+
+    const data = await res.json();
+    return await evaluatePaymentStatus(data, trimmedId);
+
+  } catch (err) {
+    console.warn('[BulkGrab Service Worker] Payment verification network error:', err);
+    return {
+      valid: false,
+      error: `Network error connecting to payment verification service: ${err.message}`
+    };
+  }
 }
 
 /**
@@ -165,7 +250,7 @@ export async function verifyLicense(chargeId) {
 export async function resetLicense() {
   await chrome.storage.local.set({
     [STORAGE_KEYS.LICENSE_STATUS]: 'free',
-    [STORAGE_KEYS.COINBASE_CHARGE_ID]: ''
+    [STORAGE_KEYS.NOWPAYMENTS_PAYMENT_ID]: ''
   });
   console.log('[BulkGrab Service Worker] License status reset to free.');
 
@@ -506,18 +591,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         const local = await chrome.storage.local.get([
           STORAGE_KEYS.LICENSE_STATUS,
-          STORAGE_KEYS.COINBASE_CHARGE_ID
+          STORAGE_KEYS.NOWPAYMENTS_PAYMENT_ID
         ]);
         let sessionCount = 0;
         if (chrome.storage.session) {
           const session = await chrome.storage.session.get(STORAGE_KEYS.SESSION_DOWNLOADS);
           sessionCount = session[STORAGE_KEYS.SESSION_DOWNLOADS] || 0;
         }
+        const paymentId = local[STORAGE_KEYS.NOWPAYMENTS_PAYMENT_ID] || '';
         sendResponse({
           status: 'ok',
           licenseStatus: local[STORAGE_KEYS.LICENSE_STATUS] || 'free',
-          coinbaseChargeId: local[STORAGE_KEYS.COINBASE_CHARGE_ID] || '',
-          chargeId: local[STORAGE_KEYS.COINBASE_CHARGE_ID] || '',
+          nowpaymentsPaymentId: paymentId,
+          paymentId: paymentId,
           sessionDownloads: sessionCount,
           freeLimit: FREE_DOWNLOAD_LIMIT
         });
@@ -528,11 +614,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // 2. Verify license stub
+  // 2. Verify license
   if (message.action === MESSAGE_ACTIONS.VERIFY_LICENSE) {
     (async () => {
-      const chargeId = message.chargeId || message.sessionId;
-      const result = await verifyLicense(chargeId);
+      const paymentId = message.paymentId || message.chargeId || message.sessionId;
+      const result = await verifyLicense(paymentId, message.options);
       sendResponse(result);
     })();
     return true;

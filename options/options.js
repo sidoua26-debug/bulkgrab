@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const tierDescription = document.getElementById('tier-description');
   const sessionInfoBox = document.getElementById('session-info-box');
   const activeSessionId = document.getElementById('active-session-id');
-  const chargeIdInput = document.getElementById('charge-id-input') || document.getElementById('session-id-input');
+  const paymentIdInput = document.getElementById('payment-id-input') || document.getElementById('charge-id-input') || document.getElementById('session-id-input');
   const btnActivate = document.getElementById('btn-activate');
   const btnReset = document.getElementById('btn-reset');
   const btnResetQuota = document.getElementById('btn-reset-quota');
@@ -42,11 +42,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           tierBadge.className = 'badge badge-pro';
           tierDescription.textContent = 'You have unlocked BulkGrab PRO. Unlimited batch downloads and client-side ZIP packaging are enabled!';
           
-          const chargeId = res.coinbaseChargeId || res.chargeId;
-          if (chargeId) {
+          const paymentId = res.nowpaymentsPaymentId || res.paymentId || res.coinbaseChargeId || res.chargeId;
+          if (paymentId) {
             sessionInfoBox.style.display = 'flex';
-            activeSessionId.textContent = chargeId;
-            if (chargeIdInput) chargeIdInput.value = chargeId;
+            activeSessionId.textContent = paymentId;
+            if (paymentIdInput) paymentIdInput.value = paymentId;
           } else {
             sessionInfoBox.style.display = 'none';
           }
@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           const used = res.sessionDownloads || 0;
           tierDescription.textContent = `You are on the Free Plan. Quota: ${used} / ${res.freeLimit || FREE_DOWNLOAD_LIMIT} downloads used this session. Single-file sequential downloading only.`;
           sessionInfoBox.style.display = 'none';
-          if (chargeIdInput) chargeIdInput.value = '';
+          if (paymentIdInput) paymentIdInput.value = '';
           btnActivate.textContent = 'Activate Pro';
         }
       }
@@ -105,19 +105,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Activate Pro button
   btnActivate.addEventListener('click', async () => {
-    const chargeId = chargeIdInput ? chargeIdInput.value.trim() : '';
-    if (!chargeId) {
-      showMessage('Please enter your Coinbase Commerce Charge ID (e.g. 8-character code or UUID).', 'error');
+    const paymentId = paymentIdInput ? paymentIdInput.value.trim() : '';
+    if (!paymentId) {
+      showMessage('Please enter your NOWPayments Payment ID (e.g. 5829104812).', 'error');
       return;
     }
 
     btnActivate.disabled = true;
-    btnActivate.textContent = 'Verifying on blockchain...';
+    btnActivate.textContent = 'Verifying with NOWPayments...';
 
     try {
       const response = await chrome.runtime.sendMessage({
         action: MESSAGE_ACTIONS.VERIFY_LICENSE,
-        chargeId: chargeId
+        paymentId: paymentId
       });
 
       if (response && response.valid) {

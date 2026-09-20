@@ -3,7 +3,7 @@
  * Manages popup display, tab file counts, category breakdown, and plan/quota status.
  */
 
-import { MESSAGE_ACTIONS, COINBASE_CHECKOUT_URL, FREE_DOWNLOAD_LIMIT } from '../utils/constants.js';
+import { MESSAGE_ACTIONS, NOWPAYMENTS_PAYMENT_URL, FREE_DOWNLOAD_LIMIT } from '../utils/constants.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Elements
@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
       if (btnUpgrade) {
         btnUpgrade.style.display = '';
-        btnUpgrade.href = COINBASE_CHECKOUT_URL;
+        btnUpgrade.href = NOWPAYMENTS_PAYMENT_URL;
       }
     }
   }
