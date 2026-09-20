@@ -107,7 +107,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   btnActivate.addEventListener('click', async () => {
     const paymentId = paymentIdInput ? paymentIdInput.value.trim() : '';
     if (!paymentId) {
-      showMessage('Please enter your NOWPayments Payment ID (e.g. 5829104812).', 'error');
+      showMessage('Please enter your NOWPayments Payment ID.', 'error');
       return;
     }
 

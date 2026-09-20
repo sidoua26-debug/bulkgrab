@@ -97,8 +97,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnUpgrade.style.display = '';
         btnUpgrade.href = NOWPAYMENTS_PAYMENT_URL;
       }
+      
+      // If an invoice was recently generated, display instruction box
+      chrome.storage?.local?.get(['pendingInvoiceId', 'pendingPaymentId']).then((stored) => {
+        if (!isPro && (stored?.pendingInvoiceId || stored?.pendingPaymentId) && paymentInstructionBox) {
+          paymentInstructionBox.style.display = 'block';
+        }
+      }).catch(() => {});
     }
   }
+
+  const paymentInstructionBox = document.getElementById('payment-instruction-box');
+  const btnOpenOptionsInstruction = document.getElementById('btn-open-options-instruction');
+
+  btnOpenOptionsInstruction?.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (chrome.runtime.openOptionsPage) {
+      chrome.runtime.openOptionsPage();
+    } else {
+      chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html') });
+    }
+  });
 
   // Dynamic payment invoice creation on click
   btnUpgrade?.addEventListener('click', async (e) => {
@@ -114,9 +133,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       } else {
         chrome.tabs.create({ url: btnUpgrade.href || res?.fallbackUrl || NOWPAYMENTS_PAYMENT_URL });
       }
+      // Reveal post-payment guidance immediately
+      if (paymentInstructionBox) {
+        paymentInstructionBox.style.display = 'block';
+      }
     } catch (err) {
       console.warn('[BulkGrab Popup] Payment creation failed, opening fallback:', err);
       chrome.tabs.create({ url: btnUpgrade.href || NOWPAYMENTS_PAYMENT_URL });
+      if (paymentInstructionBox) {
+        paymentInstructionBox.style.display = 'block';
+      }
     } finally {
       btnUpgrade.innerHTML = originalContent;
       btnUpgrade.style.pointerEvents = '';

@@ -54,9 +54,10 @@ export const FREE_DOWNLOAD_LIMIT = 7;
 export const STORAGE_KEYS = {
   LICENSE_STATUS: 'licenseStatus',                 // 'free' | 'pro'
   SESSION_DOWNLOADS: 'sessionDownloadCount',       // integer (stored in chrome.storage.session)
-  NOWPAYMENTS_PAYMENT_ID: 'nowpaymentsPaymentId', // string (NOWPayments Payment ID)
+  NOWPAYMENTS_PAYMENT_ID: 'nowpaymentsPaymentId', // string (verified NOWPayments Payment ID)
   PAYMENT_ID: 'nowpaymentsPaymentId',              // convenience alias
-  PENDING_PAYMENT_ID: 'pendingPaymentId'           // string (most recently generated dynamic payment ID)
+  PENDING_INVOICE_ID: 'pendingInvoiceId',         // string (most recently generated dynamic invoice ID)
+  PENDING_PAYMENT_ID: 'pendingPaymentId'           // legacy alias for pendingInvoiceId
 };
 
 // Message actions for runtime communication between components
@@ -88,7 +89,7 @@ export const NOWPAYMENTS_PAYMENT_URL = 'https://nowpayments.io/payment/?iid=bulk
 export const NOWPAYMENTS_API_BASE = 'https://api.nowpayments.io/v1';
 
 // Cloudflare Worker backend endpoints
-// Deploy cloudflare-worker/worker.js and replace with your live workers.dev URL
-export const NOWPAYMENTS_WORKER_URL = 'https://bulkgrab-licensing.YOUR_SUBDOMAIN.workers.dev/api/verify-payment';
-export const NOWPAYMENTS_WORKER_CREATE_PAYMENT_URL = 'https://bulkgrab-licensing.YOUR_SUBDOMAIN.workers.dev/api/create-payment';
+// Deployed live on Cloudflare Workers
+export const NOWPAYMENTS_WORKER_URL = 'https://bulkgrab-licensing.sidoua26.workers.dev/api/verify-payment';
+export const NOWPAYMENTS_WORKER_CREATE_PAYMENT_URL = 'https://bulkgrab-licensing.sidoua26.workers.dev/api/create-payment';
 

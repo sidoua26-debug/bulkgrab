@@ -64,7 +64,7 @@ The extension uses NOWPayments for cryptocurrency payments and includes status v
 
 ### Testing License Activation:
 1. Open the Options page by clicking the gear icon (⚙️) in the popup or right-clicking the extension icon -> **Options**.
-2. In the **NOWPayments Payment ID** input, enter any valid Payment ID (e.g. `5829104812`, or test IDs like `test_waiting_1`, `test_confirming_2`, `test_partially_paid_3`).
+2. In the **NOWPayments Payment ID** input, enter your Payment ID received after completing payment on the NOWPayments checkout screen.
 3. Click **Activate Pro**.
 4. The badge will immediately update to **PRO Active**, unlocking unlimited downloads and the "📦 ZIP" feature.
 5. Click **Reset to Free Tier (For Testing)** anytime to revert back to the Free plan.
@@ -92,7 +92,7 @@ The complete Worker code is provided in [`cloudflare-worker/worker.js`](cloudfla
      - Name: `NOWPAYMENTS_API_KEY` -> Paste your private API key.
      - Name: `NOWPAYMENTS_IPN_KEY` -> Paste your private IPN key.
    - Click **Deploy** / **Save**.
-7. Note your live Worker URL (e.g. `https://bulkgrab-licensing.<your-subdomain>.workers.dev`).
+7. Note your live Worker URL (e.g. `https://bulkgrab-licensing.sidoua26.workers.dev`).
 
 #### Option B: Wrangler CLI
 ```bash
@@ -107,15 +107,15 @@ npx wrangler deploy
 1. In the NOWPayments dashboard, navigate to **Settings** -> **Payment settings** -> **Instant Payment Notifications (IPN)**.
 2. Enter your live Worker webhook URL:
    ```
-   https://bulkgrab-licensing.<your-subdomain>.workers.dev/api/webhook
+   https://bulkgrab-licensing.sidoua26.workers.dev/api/webhook
    ```
 3. Click **Save** and use the **Test IPN** button to verify connectivity.
 
 ### 3. Connect Worker URL to Extension
 In [`utils/constants.js`](utils/constants.js), update the worker URLs:
 ```javascript
-export const NOWPAYMENTS_WORKER_URL = 'https://bulkgrab-licensing.<your-subdomain>.workers.dev/api/verify-payment';
-export const NOWPAYMENTS_WORKER_CREATE_PAYMENT_URL = 'https://bulkgrab-licensing.<your-subdomain>.workers.dev/api/create-payment';
+export const NOWPAYMENTS_WORKER_URL = 'https://bulkgrab-licensing.sidoua26.workers.dev/api/verify-payment';
+export const NOWPAYMENTS_WORKER_CREATE_PAYMENT_URL = 'https://bulkgrab-licensing.sidoua26.workers.dev/api/create-payment';
 ```
 
 ---
@@ -152,6 +152,6 @@ This runs end-to-end automated tests validating:
 4. **Free Quota Cap**: Select 8 files on Free tier and click download — verify quota warning appears.
 5. **Sequential Download**: Select 2 files on Free tier — verify files download one after another and session quota updates to `2 / 7 used`.
 6. **Navigation Badge Clear**: Navigate tab to a new URL — verify toolbar badge clears immediately.
-7. **License Upgrade**: Open Options, enter `5829104812`, click **Activate Pro** — verify Pro Active badge appears and open tabs immediately unlock without reload.
+7. **License Upgrade**: Open Options, enter your confirmed Payment ID, click **Activate Pro** — verify Pro Active badge appears and open tabs immediately unlock without reload.
 8. **Pro ZIP Bundling**: In the floating panel, select files and click **📦 ZIP** — verify JSZip bundles files client-side or via background worker.
 9. **Reset**: In Options, click **Reset to Free Tier** — verify status downgrades back to Free across all open tabs.

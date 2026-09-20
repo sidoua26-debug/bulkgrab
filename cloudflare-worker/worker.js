@@ -126,7 +126,8 @@ export default {
           if (nowpaymentsRes.status === 404) {
             return new Response(JSON.stringify({
               valid: false,
-              error: `Payment ID "${paymentId}" was not found on NOWPayments. Please verify the ID from your receipt.`
+              notFound: true,
+              error: 'Payment ID not found, please check you copied the Payment ID from the payment page.'
             }), { status: 404, headers: CORS_HEADERS });
           }
 
@@ -323,11 +324,13 @@ export default {
 
         const data = await invoiceRes.json();
         const invoiceUrl = data.invoice_url || `https://nowpayments.io/payment/?iid=${data.id}`;
-        const paymentId = String(data.id || data.payment_id || '');
+        const invoiceId = String(data.id || '');
+        const paymentId = invoiceId; // legacy alias for backward compatibility
 
         return new Response(JSON.stringify({
           ok: true,
           invoiceUrl,
+          invoiceId,
           paymentId,
           orderId: data.order_id,
           priceAmount: data.price_amount,

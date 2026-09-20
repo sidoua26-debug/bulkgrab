@@ -180,11 +180,45 @@ export async function verifyLicense(paymentId, options = {}) {
 
   const trimmedId = paymentId.trim();
 
-  // Test / Mock handler (for automated tests or offline development)
-  const isMockId = trimmedId.startsWith('test_') || trimmedId.startsWith('mock_');
-  const isPlaceholderWorker = !NOWPAYMENTS_WORKER_URL || NOWPAYMENTS_WORKER_URL.includes('YOUR_SUBDOMAIN');
+  // Read internal test flag and pending invoice IDs from local storage
+  const storage = await chrome.storage.local.get([
+    '__testMockVerification__',
+    STORAGE_KEYS.PENDING_INVOICE_ID,
+    STORAGE_KEYS.PENDING_PAYMENT_ID
+  ]);
 
-  if (isMockId || (isPlaceholderWorker && !options.apiKey)) {
+  // Guard: never verify a license using an Invoice ID or invoice URL
+  const knownInvoiceId = storage[STORAGE_KEYS.PENDING_INVOICE_ID] || storage[STORAGE_KEYS.PENDING_PAYMENT_ID];
+  if (knownInvoiceId && trimmedId === String(knownInvoiceId)) {
+    return {
+      valid: false,
+      isInvoiceId: true,
+      error: 'That is the Invoice ID. After paying, copy the Payment ID shown at the top of the payment page and paste it here to activate Pro.'
+    };
+  }
+
+  if (trimmedId.includes('iid=') || trimmedId.includes('/payment/?') || trimmedId.includes('/payment?')) {
+    return {
+      valid: false,
+      isInvoiceId: true,
+      error: 'That is the invoice link or Invoice ID. After paying, copy the Payment ID shown at the top of the payment page and paste it here to activate Pro.'
+    };
+  }
+
+  // Security: Simulated mock bypass is STRICTLY restricted to internal automated test runs
+  // where the test harness explicitly sets `__testMockVerification__: true` in chrome.storage.local.
+  // In production, real users CANNOT set this flag and will ALWAYS query the live Cloudflare Worker.
+  const isTestHarness = options.testMode === true || storage.__testMockVerification__ === true;
+
+  if (isTestHarness && (trimmedId.startsWith('test_') || trimmedId.startsWith('mock_'))) {
+    if (trimmedId.includes('not_found') || trimmedId.includes('unknown') || trimmedId.includes('invalid')) {
+      return {
+        valid: false,
+        notFound: true,
+        error: 'Payment ID not found, please check you copied the Payment ID from the payment page.'
+      };
+    }
+
     // Determine simulated status from mock ID patterns
     let mockStatus = 'finished';
     if (trimmedId.includes('waiting')) mockStatus = 'waiting';
@@ -228,6 +262,16 @@ export async function verifyLicense(paymentId, options = {}) {
       const errText = await res.text();
       let errJson;
       try { errJson = JSON.parse(errText); } catch (_) {}
+
+      // If the payment ID is unknown, non-numeric, or not found on NOWPayments
+      if (res.status === 404 || errJson?.notFound || errJson?.error?.toLowerCase().includes('not found') || errJson?.error?.toLowerCase().includes('must be a number')) {
+        return {
+          valid: false,
+          notFound: true,
+          error: 'Payment ID not found, please check you copied the Payment ID from the payment page.'
+        };
+      }
+
       return {
         valid: false,
         error: errJson?.error || errJson?.message || `Payment verification returned HTTP ${res.status}`
@@ -235,6 +279,13 @@ export async function verifyLicense(paymentId, options = {}) {
     }
 
     const data = await res.json();
+    if (data?.notFound || data?.error?.toLowerCase().includes('not found')) {
+      return {
+        valid: false,
+        notFound: true,
+        error: 'Payment ID not found, please check you copied the Payment ID from the payment page.'
+      };
+    }
     return await evaluatePaymentStatus(data, trimmedId);
 
   } catch (err) {
@@ -270,13 +321,17 @@ export async function createPaymentInvoice() {
 
   if (isPlaceholderWorker) {
     // Mock dynamic generation for tests / offline mode
-    const mockPaymentId = '5829' + Math.floor(100000 + Math.random() * 900000);
-    const mockUrl = `https://nowpayments.io/payment/?iid=${mockPaymentId}`;
-    await chrome.storage.local.set({ [STORAGE_KEYS.PENDING_PAYMENT_ID]: mockPaymentId });
+    const mockInvoiceId = '4743' + Math.floor(100000 + Math.random() * 900000);
+    const mockUrl = `https://nowpayments.io/payment/?iid=${mockInvoiceId}`;
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.PENDING_INVOICE_ID]: mockInvoiceId,
+      [STORAGE_KEYS.PENDING_PAYMENT_ID]: mockInvoiceId
+    });
     return {
       ok: true,
       invoiceUrl: mockUrl,
-      paymentId: mockPaymentId,
+      invoiceId: mockInvoiceId,
+      paymentId: mockInvoiceId,
       orderId: `BG_PRO_TEST_${Date.now()}`
     };
   }
@@ -293,10 +348,18 @@ export async function createPaymentInvoice() {
 
     const data = await res.json();
     if (data.ok && data.invoiceUrl) {
-      if (data.paymentId) {
-        await chrome.storage.local.set({ [STORAGE_KEYS.PENDING_PAYMENT_ID]: data.paymentId });
+      const invoiceId = String(data.invoiceId || data.paymentId || data.id || '');
+      if (invoiceId) {
+        await chrome.storage.local.set({
+          [STORAGE_KEYS.PENDING_INVOICE_ID]: invoiceId,
+          [STORAGE_KEYS.PENDING_PAYMENT_ID]: invoiceId
+        });
       }
-      return data;
+      return {
+        ...data,
+        invoiceId,
+        paymentId: invoiceId
+      };
     }
     throw new Error(data.error || 'Failed to create invoice');
   } catch (err) {

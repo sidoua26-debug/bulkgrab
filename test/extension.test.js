@@ -73,6 +73,12 @@ async function setupBrowser() {
   const swUrl = swTarget.url();
   extId = swUrl.split('/')[2];
   console.log(`[Test Setup] Loaded BulkGrab Extension (ID: ${extId})`);
+
+  // Set internal test harness flag (never present in production user environment)
+  const sw = await swTarget.worker();
+  await sw.evaluate(async () => {
+    await chrome.storage.local.set({ __testMockVerification__: true });
+  });
 }
 
 async function runTests() {
@@ -323,7 +329,7 @@ async function runTests() {
       assert.strictEqual(initialBadge, 'Free Plan');
 
       // Enter a test NOWPayments Payment ID
-      await optionsPage.type('#payment-id-input', '5829104812');
+      await optionsPage.type('#payment-id-input', 'test_verified_payment_1');
       await optionsPage.click('#btn-activate');
 
       // Wait for UI to update
@@ -338,7 +344,7 @@ async function runTests() {
       });
 
       assert.strictEqual(storageData.licenseStatus, 'pro', 'Storage licenseStatus should be "pro"');
-      assert.strictEqual(storageData.nowpaymentsPaymentId, '5829104812', 'Stored payment ID must match');
+      assert.strictEqual(storageData.nowpaymentsPaymentId, 'test_verified_payment_1', 'Stored payment ID must match');
 
       await optionsPage.close();
     });
@@ -862,18 +868,18 @@ async function runTests() {
       const validResult = await optionsPage.evaluate(async () => {
         return await chrome.runtime.sendMessage({
           action: 'BULKGRAB_VERIFY_LICENSE',
-          paymentId: '5829104812'
+          paymentId: 'test_verified_payment_1'
         });
       });
       assert.strictEqual(validResult.valid, true, 'Valid payment ID must return valid: true');
       assert.strictEqual(validResult.status, 'pro', 'Valid payment ID must set status: pro');
-      assert.strictEqual(validResult.paymentId, '5829104812', 'Returned paymentId must match');
+      assert.strictEqual(validResult.paymentId, 'test_verified_payment_1', 'Returned paymentId must match');
 
       const storageAfterValid = await sw.evaluate(async () => {
         return await chrome.storage.local.get(['licenseStatus', 'nowpaymentsPaymentId']);
       });
       assert.strictEqual(storageAfterValid.licenseStatus, 'pro', 'License should be pro after valid payment ID');
-      assert.strictEqual(storageAfterValid.nowpaymentsPaymentId, '5829104812', 'Stored paymentId should match');
+      assert.strictEqual(storageAfterValid.nowpaymentsPaymentId, 'test_verified_payment_1', 'Stored paymentId should match');
 
       // Reset back to free
       await optionsPage.click('#btn-reset');
@@ -900,9 +906,103 @@ async function runTests() {
       // Verify pendingPaymentId was stored
       const sw = await swTarget.worker();
       const storage = await sw.evaluate(async () => {
-        return await chrome.storage.local.get(['pendingPaymentId']);
+        return await chrome.storage.local.get(['pendingPaymentId', 'pendingInvoiceId']);
       });
       assert.strictEqual(storage.pendingPaymentId, createResult.paymentId, 'pendingPaymentId must be saved in storage');
+      assert.strictEqual(storage.pendingInvoiceId, createResult.paymentId, 'pendingInvoiceId must be saved in storage');
+
+      await page.close();
+    });
+
+    // =========================================================================
+    // TEST 17: Unknown payment ID shows friendly not-found guidance message
+    // =========================================================================
+    await test('verifyLicense with unknown ID shows friendly not-found guidance message and rejects invoice ID', async () => {
+      const page = await browser.newPage();
+      const sw = await swTarget.worker();
+      await page.goto(`chrome-extension://${extId}/options/options.html`, { waitUntil: 'domcontentloaded' });
+
+      // 1. Direct message verify call with an unknown ID
+      const unknownResult = await page.evaluate(async () => {
+        return await chrome.runtime.sendMessage({
+          action: 'BULKGRAB_VERIFY_LICENSE',
+          paymentId: 'test_unknown_payment_id_999'
+        });
+      });
+
+      assert.strictEqual(unknownResult.valid, false, 'Unknown payment ID must return valid: false');
+      assert.strictEqual(unknownResult.notFound, true, 'Unknown payment ID must set notFound: true');
+      assert(
+        unknownResult.error.toLowerCase().includes('not found, please check you copied the payment id from the payment page'),
+        'Unknown ID must show friendly message rather than raw error'
+      );
+
+      // 2. Options page UI test with an unknown payment ID
+      await page.type('#payment-id-input', 'test_unknown_payment_id_999');
+      await page.click('#btn-activate');
+
+      await page.waitForFunction(() => {
+        const el = document.getElementById('status-message');
+        return el && el.style.display !== 'none' && el.textContent.length > 0;
+      }, { timeout: 5000 });
+
+      const uiErrorMsg = await page.$eval('#status-message', el => el.textContent);
+      assert(
+        uiErrorMsg.toLowerCase().includes('not found, please check you copied the payment id from the payment page'),
+        'UI status alert must display friendly not-found message'
+      );
+
+      // 3. Verify that verifying with an Invoice ID is blocked and never activates Pro
+      const createRes = await page.evaluate(async () => {
+        return await chrome.runtime.sendMessage({ action: 'BULKGRAB_CREATE_PAYMENT' });
+      });
+      const invoiceId = createRes.invoiceId || createRes.paymentId;
+      assert(invoiceId, 'CREATE_PAYMENT must return an invoice ID');
+
+      const invoiceVerifyRes = await page.evaluate(async (iid) => {
+        return await chrome.runtime.sendMessage({
+          action: 'BULKGRAB_VERIFY_LICENSE',
+          paymentId: iid
+        });
+      }, invoiceId);
+
+      assert.strictEqual(invoiceVerifyRes.valid, false, 'Verifying with invoice ID must return valid: false');
+      assert.strictEqual(invoiceVerifyRes.isInvoiceId, true, 'isInvoiceId must be set');
+      assert(
+        invoiceVerifyRes.error.includes('Invoice ID') && invoiceVerifyRes.error.includes('Payment ID shown at the top of the payment page'),
+        'Error must explain that this is the Invoice ID'
+      );
+
+      // 4. Test that pasting an invoice URL is also rejected
+      const urlVerifyRes = await page.evaluate(async () => {
+        return await chrome.runtime.sendMessage({
+          action: 'BULKGRAB_VERIFY_LICENSE',
+          paymentId: 'https://nowpayments.io/payment/?iid=4743404425'
+        });
+      });
+      assert.strictEqual(urlVerifyRes.valid, false, 'Verifying with invoice URL must return valid: false');
+      assert.strictEqual(urlVerifyRes.isInvoiceId, true, 'isInvoiceId must be set');
+
+      // 5. Security verification: When test flag is removed, real users CANNOT bypass verification
+      await sw.evaluate(async () => {
+        await chrome.storage.local.remove('__testMockVerification__');
+      });
+
+      const unflaggedRes = await page.evaluate(async () => {
+        return await chrome.runtime.sendMessage({
+          action: 'BULKGRAB_VERIFY_LICENSE',
+          paymentId: 'test_attempted_bypass_123'
+        });
+      });
+
+      // Bypasses fail — request routed to live Cloudflare Worker and rejected
+      assert.strictEqual(unflaggedRes.valid, false, 'Without test flag, test_ IDs must be rejected by live worker');
+      assert.strictEqual(unflaggedRes.notFound, true, 'Live worker returns notFound for non-existent transactions');
+
+      // Re-enable test flag for safety
+      await sw.evaluate(async () => {
+        await chrome.storage.local.set({ __testMockVerification__: true });
+      });
 
       await page.close();
     });
