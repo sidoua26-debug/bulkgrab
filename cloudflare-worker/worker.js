@@ -212,6 +212,10 @@ export default {
     // =========================================================================
     if (url.pathname === '/api/verify-payment') {
       const paymentId = url.searchParams.get('payment_id')?.trim();
+      const product = (url.searchParams.get('product') || 'bulkgrab').trim().toLowerCase();
+      const isTableExtractor = product === 'table-extractor' || product === 'te';
+      const productName = isTableExtractor ? 'Table Extractor' : 'BulkGrab';
+      const expectedPrefix = isTableExtractor ? 'TE_PRO_' : 'BG_PRO_';
 
       if (!paymentId) {
         return new Response(JSON.stringify({
@@ -224,16 +228,35 @@ export default {
         }), { status: 400, headers: CORS_HEADERS });
       }
 
-      // Check optional secret env.GIFT_CODES before any NOWPayments call or numeric check
-      if (env && env.GIFT_CODES && typeof env.GIFT_CODES === 'string') {
-        const giftList = env.GIFT_CODES.split(',').map(c => c.trim().toLowerCase()).filter(Boolean);
+      // Check optional secret env.GIFT_CODES and env.TE_GIFT_CODES before any NOWPayments call or numeric check
+      if (env) {
+        let giftList = [];
+        if (isTableExtractor) {
+          if (env.TE_GIFT_CODES && typeof env.TE_GIFT_CODES === 'string') {
+            giftList.push(...env.TE_GIFT_CODES.split(',').map(c => c.trim().toLowerCase()).filter(Boolean));
+          }
+          if (env.GIFT_CODES && typeof env.GIFT_CODES === 'string') {
+            const teCodes = env.GIFT_CODES.split(',')
+              .map(c => c.trim().toLowerCase())
+              .filter(c => c.startsWith('te-') || c.startsWith('te_'));
+            giftList.push(...teCodes);
+          }
+        } else {
+          if (env.GIFT_CODES && typeof env.GIFT_CODES === 'string') {
+            const bgCodes = env.GIFT_CODES.split(',')
+              .map(c => c.trim().toLowerCase())
+              .filter(c => !c.startsWith('te-') && !c.startsWith('te_'));
+            giftList.push(...bgCodes);
+          }
+        }
+
         if (giftList.length > 0 && giftList.includes(paymentId.toLowerCase())) {
           return new Response(JSON.stringify({
             valid: true,
             status: 'pro',
             payment_status: 'finished',
             source: 'gift',
-            message: 'Gift code accepted. Pro tier activated.'
+            message: isTableExtractor ? 'Gift code accepted. Table Extractor Pro tier activated.' : 'Gift code accepted. Pro tier activated.'
           }), { status: 200, headers: CORS_HEADERS });
         }
       }
@@ -293,21 +316,18 @@ export default {
           : null;
         const priceCurrency = data.price_currency ? String(data.price_currency).toLowerCase() : null;
 
-        // Harden check: A payment only counts as a BulkGrab Pro purchase if ALL of these are true:
+        // Harden check: A payment only counts as a Pro purchase if ALL of these are true:
         // - payment_status is 'finished'
-        // - order_id starts with "BG_PRO_" (created by our /api/create-payment)
+        // - order_id starts with expected product prefix ('BG_PRO_' or 'TE_PRO_')
         // - price_currency is 'usd' and price_amount is at least 9.99 (compare as numbers)
-        //
-        // Apply order_id check before pending statuses (waiting, confirming...)
-        // so unrelated payments never look like pending purchases.
-        const isBulkGrabOrder = Boolean(orderId && orderId.startsWith('BG_PRO_'));
-        const isBulkGrabPrice = priceCurrency === 'usd' && priceAmount !== null && priceAmount >= 9.99;
+        const isProductOrder = Boolean(orderId && orderId.startsWith(expectedPrefix));
+        const isProductPrice = priceCurrency === 'usd' && priceAmount !== null && priceAmount >= 9.99;
 
-        if (!isBulkGrabOrder || !isBulkGrabPrice) {
+        if (!isProductOrder || !isProductPrice) {
           return new Response(JSON.stringify({
             valid: false,
-            message: `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`,
-            error: `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`,
+            message: `This payment is not a ${productName} Pro purchase. Support: ${SUPPORT_EMAIL}`,
+            error: `This payment is not a ${productName} Pro purchase. Support: ${SUPPORT_EMAIL}`,
             orderId,
             priceAmount,
             priceCurrency,
@@ -328,7 +348,7 @@ export default {
             payAddress: data.pay_address,
             actuallyPaid: data.actually_paid,
             payCurrency: data.pay_currency,
-            message: 'NOWPayments crypto payment confirmed! Pro tier activated.'
+            message: isTableExtractor ? 'NOWPayments crypto payment confirmed! Table Extractor Pro tier activated.' : 'NOWPayments crypto payment confirmed! Pro tier activated.'
           }), { status: 200, headers: CORS_HEADERS });
         }
 
@@ -409,7 +429,7 @@ export default {
         // Fallback for any unknown status
         return new Response(JSON.stringify({
           valid: false,
-          message: `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`,
+          message: `This payment is not a ${productName} Pro purchase. Support: ${SUPPORT_EMAIL}`,
           error: `Current payment status: ${status}. Please try again later. Support: ${SUPPORT_EMAIL}`,
           orderId,
           priceAmount,
@@ -482,6 +502,20 @@ export default {
     // POST /api/create-payment or GET /api/create-payment
     // =========================================================================
     if (url.pathname === '/api/create-payment') {
+      let product = (url.searchParams.get('product') || '').trim().toLowerCase();
+      if (!product && request.method === 'POST') {
+        try {
+          const body = await request.clone().json();
+          if (body && body.product) {
+            product = String(body.product).trim().toLowerCase();
+          }
+        } catch (_) {}
+      }
+
+      const isTableExtractor = product === 'table-extractor' || product === 'te';
+      const orderPrefix = isTableExtractor ? 'TE_PRO_' : 'BG_PRO_';
+      const orderDesc = isTableExtractor ? 'Table Extractor Pro Lifetime License' : 'BulkGrab Pro Lifetime License';
+
       if (!env.NOWPAYMENTS_API_KEY) {
         console.error('[Worker] NOWPAYMENTS_API_KEY secret is not configured!');
         return new Response(JSON.stringify({
@@ -491,7 +525,7 @@ export default {
       }
 
       try {
-        const orderId = `BG_PRO_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const orderId = `${orderPrefix}${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const webhookUrl = `${url.origin}/api/webhook`;
 
         // Create fresh invoice via NOWPayments Payments/Invoice API
@@ -508,7 +542,7 @@ export default {
             pay_currency: 'usdtbsc',
             ipn_callback_url: webhookUrl,
             order_id: orderId,
-            order_description: 'BulkGrab Pro Lifetime License'
+            order_description: orderDesc
           })
         });
 
