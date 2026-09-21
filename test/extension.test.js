@@ -1295,6 +1295,15 @@ async function runTests() {
 
       // 3. Verify that all referenced/imported files exist in the unzipped folder
       const manifest = JSON.parse(fs.readFileSync(path.join(tempExtDir, 'manifest.json'), 'utf8'));
+
+      // Verify that no top-level manifest key starts with "_"
+      const underscoreKeys = Object.keys(manifest).filter(key => key.startsWith('_'));
+      assert.strictEqual(
+        underscoreKeys.length,
+        0,
+        `Top-level manifest keys must not start with "_", found: ${underscoreKeys.join(', ')}`
+      );
+
       const requiredFiles = [
         manifest.background.service_worker,
         manifest.action.default_popup,
