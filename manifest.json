@@ -1,26 +1,22 @@
 {
   "manifest_version": 3,
   "name": "BulkGrab - Bulk File Downloader",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Bulk file downloader that detects, selects, and downloads downloadable files from webpages with freemium and ZIP export options.",
-  
   "permissions": [
     "downloads",
     "activeTab",
     "scripting",
     "storage"
   ],
-
   "host_permissions": [],
   "optional_host_permissions": [
     "<all_urls>"
   ],
-
   "background": {
     "service_worker": "background/service-worker.js",
     "type": "module"
   },
-
   "action": {
     "default_popup": "popup/popup.html",
     "default_title": "BulkGrab",
@@ -30,18 +26,15 @@
       "128": "assets/icons/icon-128.png"
     }
   },
-
   "options_ui": {
     "page": "options/options.html",
     "open_in_tab": true
   },
-
   "icons": {
     "16": "assets/icons/icon-16.png",
     "48": "assets/icons/icon-48.png",
     "128": "assets/icons/icon-128.png"
   },
-
   "web_accessible_resources": [
     {
       "resources": [
@@ -50,7 +43,10 @@
         "assets/icons/*",
         "assets/vendor/jszip.min.js"
       ],
-      "matches": ["http://*/*", "https://*/*"]
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
     }
   ]
 }
