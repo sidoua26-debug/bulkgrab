@@ -80,11 +80,12 @@ function getPrivacyHtml(product = '') {
   const h1Title = isTableExtractor ? 'Table Extractor Privacy Policy' : 'BulkGrab Privacy Policy';
 
   const deviceText = isTableExtractor
-    ? 'Table Extractor scans the page you are on only when you choose to detect or capture tables. Exporting to CSV, XLSX, and JSON, row accumulation, and ZIP bundling all happen locally in your browser. We do not collect, sell or share your browsing history or page contents. Your license status (Free or Pro) and a pending payment reference are stored in Chrome\'s extension storage on your device.'
+    ? 'Table Extractor scans the page you are on only when you choose to detect or capture tables. Table detection, row accumulation, deduplication, and export generation (CSV, XLSX, JSON) all happen locally in your browser. We do not collect, sell, or share your browsing history or page contents. Your license status (Free or Pro) and payment/gift reference are stored in your browser\'s local extension storage on your device.'
     : 'BulkGrab scans the page you are on only when you use the extension. The list of files, your selections and ZIP bundling all happen locally in your browser. We do not collect, sell or share your browsing history or page contents. Your license status (Free or Pro), your session download count and a pending payment reference are stored in Chrome\'s extension storage on your device.';
 
+  const item4Heading = isTableExtractor ? 'Permissions & tab access' : 'Optional site access';
   const optionalAccessText = isTableExtractor
-    ? 'Table Extractor operates only on the active tab you choose to extract. It does not access or monitor network requests in the background.'
+    ? 'Table Extractor requests only activeTab, scripting, and storage permissions. It operates only on the active tab you choose to extract when you interact with the extension. It does not monitor browsing history or access network requests in the background.'
     : 'BulkGrab asks for permission to read data on all websites only if a Pro user chooses &quot;Download as ZIP&quot; for files hosted on other domains. It is used only to fetch the files you selected. You can decline it (files then download individually) and revoke it any time on the Options page.';
 
   return `<!DOCTYPE html>
@@ -205,7 +206,7 @@ function getPrivacyHtml(product = '') {
         <strong>3. Payments.</strong> Payments are made in cryptocurrency through NOWPayments, a third party, under NOWPayments' own terms and privacy policy. We can see payment records in our NOWPayments account (payment ID, amount, status) and the public blockchain transaction. We do not receive or store your wallet keys or card details.
       </li>
       <li>
-        <strong>4. Optional site access.</strong> ${optionalAccessText}
+        <strong>4. ${item4Heading}.</strong> ${optionalAccessText}
       </li>
       <li>
         <strong>5. No selling, no ads.</strong> We do not sell your data, use it for advertising, or use it for anything other than running ${appName} and supporting your purchase.
@@ -248,6 +249,16 @@ export default {
     if ((url.pathname === '/privacy' || url.pathname === '/privacy/') && request.method === 'GET') {
       const product = (url.searchParams.get('product') || '').trim().toLowerCase();
       return new Response(getPrivacyHtml(product), {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8'
+        }
+      });
+    }
+
+    // Dedicated Table Extractor Privacy Policy route
+    if ((url.pathname === '/privacy/table-extractor' || url.pathname === '/privacy/table-extractor/') && request.method === 'GET') {
+      return new Response(getPrivacyHtml('table-extractor'), {
         status: 200,
         headers: {
           'Content-Type': 'text/html; charset=utf-8'
