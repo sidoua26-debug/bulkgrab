@@ -75,6 +75,24 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
  * Evaluate NOWPayments payment status object and update storage if finished
  */
 async function evaluatePaymentStatus(data, paymentId) {
+  // Worker response with source 'gift' and valid true activates Pro without order/price checks
+  if (data && data.source === 'gift' && data.valid === true) {
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.LICENSE_STATUS]: 'pro',
+      [STORAGE_KEYS.NOWPAYMENTS_PAYMENT_ID]: String(paymentId)
+    });
+    console.log(`[BulkGrab Service Worker] Gift code verified: Pro tier activated`);
+    broadcastLicenseChange('pro');
+    return {
+      valid: true,
+      status: 'pro',
+      payment_status: 'finished',
+      source: 'gift',
+      paymentId: String(paymentId),
+      message: data.message || 'Gift code accepted. Pro tier activated.'
+    };
+  }
+
   // If data was already validated or rejected by the worker
   if (data.valid === false && (data.message?.includes('This payment is not a BulkGrab Pro purchase') || data.error?.includes('This payment is not a BulkGrab Pro purchase'))) {
     return data;
@@ -267,12 +285,23 @@ export async function verifyLicense(paymentId, options = {}) {
   const isTestHarness = options.testMode === true || storage.__testMockVerification__ === true;
 
   if (isTestHarness && (trimmedId.startsWith('test_') || trimmedId.startsWith('mock_'))) {
-    if (trimmedId.includes('not_found') || trimmedId.includes('unknown') || trimmedId.includes('invalid')) {
+    if (trimmedId.includes('not_found') || trimmedId.includes('unknown') || trimmedId.includes('invalid') || trimmedId.includes('wrong')) {
       return {
         valid: false,
         notFound: true,
         error: `Payment ID not found, please check you copied the Payment ID from the payment page. Support: ${SUPPORT_EMAIL}`
       };
+    }
+
+    // Determine simulated gift code
+    if (trimmedId.includes('gift')) {
+      return await evaluatePaymentStatus({
+        valid: true,
+        status: 'pro',
+        payment_status: 'finished',
+        source: 'gift',
+        message: 'Gift code accepted. Pro tier activated.'
+      }, trimmedId);
     }
 
     // Determine simulated status from mock ID patterns
@@ -348,6 +377,22 @@ export async function verifyLicense(paymentId, options = {}) {
     }
 
     const data = await res.json();
+    if (data && data.source === 'gift' && data.valid === true) {
+      await chrome.storage.local.set({
+        [STORAGE_KEYS.LICENSE_STATUS]: 'pro',
+        [STORAGE_KEYS.NOWPAYMENTS_PAYMENT_ID]: String(trimmedId)
+      });
+      console.log(`[BulkGrab Service Worker] Gift code verified: Pro tier activated`);
+      broadcastLicenseChange('pro');
+      return {
+        valid: true,
+        status: 'pro',
+        payment_status: 'finished',
+        source: 'gift',
+        paymentId: String(trimmedId),
+        message: data.message || 'Gift code accepted. Pro tier activated.'
+      };
+    }
     if (data?.notFound || data?.error?.toLowerCase().includes('not found')) {
       return {
         valid: false,

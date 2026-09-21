@@ -1474,6 +1474,183 @@ async function runTests() {
       }
     });
 
+    // =========================================================================
+    // TEST 22: Gift codes for free Pro access in Worker and Extension
+    // =========================================================================
+    await test('Gift codes activate Pro tier in worker and extension, reject invalid codes, disable on empty env, and preserve real payments', async () => {
+      const { default: worker } = await import('../cloudflare-worker/worker.js');
+      const { SUPPORT_EMAIL } = await import('../utils/constants.js');
+
+      const mockEnv = {
+        NOWPAYMENTS_API_KEY: 'test_key_123',
+        GIFT_CODES: 'BG-GIFT-TEST123, BG-GIFT-BONUS456'
+      };
+
+      // Mock NOWPayments fetch helper
+      async function callWorkerVerify(paymentId, envToUse = mockEnv, mockNowpaymentsResponse = null) {
+        const origFetch = global.fetch;
+        global.fetch = async (url) => {
+          if (url.includes('/payment/')) {
+            if (mockNowpaymentsResponse) {
+              return {
+                ok: mockNowpaymentsResponse.ok !== false,
+                status: mockNowpaymentsResponse.status || 200,
+                json: async () => mockNowpaymentsResponse.data || {},
+                text: async () => JSON.stringify(mockNowpaymentsResponse.data || {})
+              };
+            }
+            // Default 404 for unknown payment IDs
+            return {
+              ok: false,
+              status: 404,
+              json: async () => ({ message: 'Payment not found' }),
+              text: async () => JSON.stringify({ message: 'Payment not found' })
+            };
+          }
+          return origFetch(url);
+        };
+
+        try {
+          const req = new Request(`https://worker.local/api/verify-payment?payment_id=${encodeURIComponent(paymentId)}`);
+          const res = await worker.fetch(req, envToUse);
+          const json = await res.json();
+          return { status: res.status, data: json };
+        } finally {
+          global.fetch = origFetch;
+        }
+      }
+
+      // 1. Valid gift code activates Pro (exact match)
+      const exactRes = await callWorkerVerify('BG-GIFT-TEST123');
+      assert.strictEqual(exactRes.status, 200, 'Valid gift code must return HTTP 200');
+      assert.strictEqual(exactRes.data.valid, true, 'Valid gift code must return valid: true');
+      assert.strictEqual(exactRes.data.status, 'pro', 'Valid gift code must return status: pro');
+      assert.strictEqual(exactRes.data.payment_status, 'finished', 'Valid gift code must return payment_status: finished');
+      assert.strictEqual(exactRes.data.source, 'gift', 'Valid gift code must return source: gift');
+      assert.strictEqual(exactRes.data.message, 'Gift code accepted. Pro tier activated.');
+
+      // 2. Case-insensitivity & whitespace trimming
+      const lowerRes = await callWorkerVerify('  bg-gift-test123  ');
+      assert.strictEqual(lowerRes.status, 200, 'Lowercase trimmed gift code must return HTTP 200');
+      assert.strictEqual(lowerRes.data.valid, true);
+      assert.strictEqual(lowerRes.data.source, 'gift');
+
+      const secondCodeRes = await callWorkerVerify('bg-gift-bonus456');
+      assert.strictEqual(secondCodeRes.status, 200, 'Second configured gift code must return HTTP 200');
+      assert.strictEqual(secondCodeRes.data.valid, true);
+
+      // 3. Wrong code falls through to NOWPayments and is rejected with normal not-found message
+      const wrongRes = await callWorkerVerify('BG-GIFT-INVALID999');
+      assert.strictEqual(wrongRes.status, 404, 'Non-matching code must return HTTP 404 from fallthrough');
+      assert.strictEqual(wrongRes.data.valid, false, 'Non-matching code must return valid: false');
+      assert.strictEqual(wrongRes.data.notFound, true, 'Non-matching code must return notFound: true');
+      assert.strictEqual(
+        wrongRes.data.error,
+        `Payment ID not found, please check you copied the Payment ID from the payment page. Support: ${SUPPORT_EMAIL}`
+      );
+
+      // 4. Empty or missing GIFT_CODES disables gift codes completely
+      const emptyEnv = { NOWPAYMENTS_API_KEY: 'test_key_123', GIFT_CODES: '' };
+      const emptyEnvRes = await callWorkerVerify('BG-GIFT-TEST123', emptyEnv);
+      assert.strictEqual(emptyEnvRes.status, 404, 'With empty GIFT_CODES, gift codes are disabled');
+      assert.strictEqual(emptyEnvRes.data.valid, false);
+
+      const noGiftEnv = { NOWPAYMENTS_API_KEY: 'test_key_123' };
+      const noGiftEnvRes = await callWorkerVerify('BG-GIFT-TEST123', noGiftEnv);
+      assert.strictEqual(noGiftEnvRes.status, 404, 'With missing GIFT_CODES, gift codes are disabled');
+      assert.strictEqual(noGiftEnvRes.data.valid, false);
+
+      // 5. Real payments still work through the normal flow
+      const realPaymentRes = await callWorkerVerify('5829104812', mockEnv, {
+        ok: true,
+        status: 200,
+        data: {
+          payment_id: 5829104812,
+          payment_status: 'finished',
+          order_id: 'BG_PRO_1726859345_test',
+          price_amount: '9.99',
+          price_currency: 'usd',
+          pay_address: '0x1234567890'
+        }
+      });
+      assert.strictEqual(realPaymentRes.status, 200, 'Real payment must return HTTP 200');
+      assert.strictEqual(realPaymentRes.data.valid, true);
+      assert.strictEqual(realPaymentRes.data.status, 'pro');
+      assert.strictEqual(realPaymentRes.data.source, undefined, 'Real payment should not have source: gift');
+
+      // Real payment with wrong order_id is rejected
+      const badOrderRes = await callWorkerVerify('5829104813', mockEnv, {
+        ok: true,
+        status: 200,
+        data: {
+          payment_id: 5829104813,
+          payment_status: 'finished',
+          order_id: 'WRONG_ORDER_999',
+          price_amount: '9.99',
+          price_currency: 'usd'
+        }
+      });
+      assert.strictEqual(badOrderRes.data.valid, false);
+      assert.strictEqual(badOrderRes.data.message, `This payment is not a BulkGrab Pro purchase. Support: ${SUPPORT_EMAIL}`);
+
+      // 6. Extension service worker & Options page integration
+      // Verify options page accepts gift code, activates Pro without order/currency checks
+      const page = await browser.newPage();
+      await page.goto(`chrome-extension://${extId}/options/options.html`, { waitUntil: 'domcontentloaded' });
+
+      // First reset license to free
+      await page.evaluate(async () => {
+        return await chrome.runtime.sendMessage({ action: 'BULKGRAB_RESET_LICENSE' });
+      });
+
+      // Submit simulated gift code through options page UI
+      await page.type('#payment-id-input', 'mock_gift_code_pro');
+      await page.click('#btn-activate');
+
+      await page.waitForFunction(() => {
+        const badge = document.getElementById('tier-badge');
+        return badge && badge.textContent.includes('PRO Active');
+      }, { timeout: 10000 });
+
+      const tierText = await page.$eval('#tier-badge', el => el.textContent.trim());
+      assert.strictEqual(tierText, 'PRO Active', 'Activating gift code must switch badge to PRO Active');
+
+      const statusMsg = await page.$eval('#status-message', el => el.textContent.trim());
+      assert(
+        statusMsg.includes('Gift code accepted. Pro tier activated.') || statusMsg.includes('Pro license activated successfully!'),
+        'Options page must show success message on gift code activation'
+      );
+
+      // Verify options page with wrong gift code shows not-found error
+      // Reset back to free first
+      await page.evaluate(async () => {
+        return await chrome.runtime.sendMessage({ action: 'BULKGRAB_RESET_LICENSE' });
+      });
+      await page.evaluate(() => {
+        document.getElementById('payment-id-input').value = '';
+      });
+
+      await page.type('#payment-id-input', 'mock_wrong_gift_code');
+      await page.click('#btn-activate');
+
+      await page.waitForFunction(() => {
+        const el = document.getElementById('status-message');
+        return el && el.style.display !== 'none' && el.textContent.includes('not found');
+      }, { timeout: 5000 });
+
+      const wrongMsg = await page.$eval('#status-message', el => el.textContent.trim());
+      assert(
+        wrongMsg.toLowerCase().includes('not found, please check you copied the payment id from the payment page'),
+        'Wrong code must be rejected with normal not-found message'
+      );
+
+      // Clean up: reset license back to free
+      await page.evaluate(async () => {
+        return await chrome.runtime.sendMessage({ action: 'BULKGRAB_RESET_LICENSE' });
+      });
+      await page.close();
+    });
+
   } finally {
     if (browser) await browser.close();
     if (server) server.close();

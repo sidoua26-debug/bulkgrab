@@ -224,6 +224,20 @@ export default {
         }), { status: 400, headers: CORS_HEADERS });
       }
 
+      // Check optional secret env.GIFT_CODES before any NOWPayments call or numeric check
+      if (env && env.GIFT_CODES && typeof env.GIFT_CODES === 'string') {
+        const giftList = env.GIFT_CODES.split(',').map(c => c.trim().toLowerCase()).filter(Boolean);
+        if (giftList.length > 0 && giftList.includes(paymentId.toLowerCase())) {
+          return new Response(JSON.stringify({
+            valid: true,
+            status: 'pro',
+            payment_status: 'finished',
+            source: 'gift',
+            message: 'Gift code accepted. Pro tier activated.'
+          }), { status: 200, headers: CORS_HEADERS });
+        }
+      }
+
       if (!env.NOWPAYMENTS_API_KEY) {
         console.error('[Worker] NOWPAYMENTS_API_KEY secret is not configured!');
         return new Response(JSON.stringify({
@@ -251,7 +265,7 @@ export default {
           let errJson;
           try { errJson = JSON.parse(errText); } catch (_) {}
           
-          if (nowpaymentsRes.status === 404) {
+          if (nowpaymentsRes.status === 404 || errJson?.message?.toLowerCase().includes('not found') || errJson?.message?.toLowerCase().includes('must be a number')) {
             return new Response(JSON.stringify({
               valid: false,
               notFound: true,
