@@ -73,13 +73,26 @@ async function verifyHmacSignature(rawBody, signature, secretKey) {
 /**
  * Returns simple, clean, mobile-friendly HTML for the Privacy Policy
  */
-function getPrivacyHtml() {
+function getPrivacyHtml(product = '') {
+  const isTableExtractor = product === 'table-extractor' || product === 'te';
+  const appName = isTableExtractor ? 'Table Extractor' : 'BulkGrab';
+  const pageTitle = isTableExtractor ? 'Table Extractor Privacy Policy & Support' : 'BulkGrab Privacy Policy & Support';
+  const h1Title = isTableExtractor ? 'Table Extractor Privacy Policy' : 'BulkGrab Privacy Policy';
+
+  const deviceText = isTableExtractor
+    ? 'Table Extractor scans the page you are on only when you choose to detect or capture tables. Exporting to CSV, XLSX, and JSON, row accumulation, and ZIP bundling all happen locally in your browser. We do not collect, sell or share your browsing history or page contents. Your license status (Free or Pro) and a pending payment reference are stored in Chrome\'s extension storage on your device.'
+    : 'BulkGrab scans the page you are on only when you use the extension. The list of files, your selections and ZIP bundling all happen locally in your browser. We do not collect, sell or share your browsing history or page contents. Your license status (Free or Pro), your session download count and a pending payment reference are stored in Chrome\'s extension storage on your device.';
+
+  const optionalAccessText = isTableExtractor
+    ? 'Table Extractor operates only on the active tab you choose to extract. It does not access or monitor network requests in the background.'
+    : 'BulkGrab asks for permission to read data on all websites only if a Pro user chooses &quot;Download as ZIP&quot; for files hosted on other domains. It is used only to fetch the files you selected. You can decline it (files then download individually) and revoke it any time on the Options page.';
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BulkGrab Privacy Policy</title>
+  <title>${pageTitle}</title>
   <style>
     :root {
       --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -121,7 +134,7 @@ function getPrivacyHtml() {
       border-bottom: 1px solid var(--border);
     }
     ol {
-      list-style-position: inside;
+      list-style: none;
       display: flex;
       flex-direction: column;
       gap: 20px;
@@ -140,21 +153,50 @@ function getPrivacyHtml() {
     a:hover {
       color: #4338ca;
     }
+    .support-box {
+      margin-top: 32px;
+      padding: 20px 24px;
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .support-box h2 {
+      font-size: 17px;
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 8px;
+    }
+    .support-box p {
+      font-size: 14px;
+      color: var(--text-main);
+      margin-bottom: 8px;
+    }
+    .support-email-link {
+      display: inline-block;
+      font-weight: 600;
+      color: var(--accent);
+      text-decoration: underline;
+      font-size: 15px;
+    }
+    .support-email-link:hover {
+      color: #4338ca;
+    }
     @media (max-width: 480px) {
       body { padding: 16px 10px; }
       .container { padding: 24px 18px; }
       h1 { font-size: 20px; }
       li { font-size: 14px; }
+      .support-box { padding: 16px 16px; }
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>BulkGrab Privacy Policy</h1>
+    <h1>${h1Title}</h1>
     <p class="date">Last updated: September 20, 2026</p>
     <ol>
       <li>
-        <strong>1. What stays on your device.</strong> BulkGrab scans the page you are on only when you use the extension. The list of files, your selections and ZIP bundling all happen locally in your browser. We do not collect, sell or share your browsing history or page contents. Your license status (Free or Pro), your session download count and a pending payment reference are stored in Chrome's extension storage on your device.
+        <strong>1. What stays on your device.</strong> ${deviceText}
       </li>
       <li>
         <strong>2. What is sent to our server.</strong> (a) When you click &quot;Pay with Crypto&quot;, the extension asks our licensing server, hosted on Cloudflare Workers, to create a payment invoice with NOWPayments. No personal information is included in that request. (b) When you activate Pro, the Payment ID you enter is sent to our server, which asks NOWPayments for that payment's status, order reference and amount to decide whether to unlock Pro. (c) Our hosting provider, Cloudflare, may process standard technical request data such as IP address and timestamps to operate and secure the service.
@@ -163,15 +205,21 @@ function getPrivacyHtml() {
         <strong>3. Payments.</strong> Payments are made in cryptocurrency through NOWPayments, a third party, under NOWPayments' own terms and privacy policy. We can see payment records in our NOWPayments account (payment ID, amount, status) and the public blockchain transaction. We do not receive or store your wallet keys or card details.
       </li>
       <li>
-        <strong>4. Optional site access.</strong> BulkGrab asks for permission to read data on all websites only if a Pro user chooses &quot;Download as ZIP&quot; for files hosted on other domains. It is used only to fetch the files you selected. You can decline it (files then download individually) and revoke it any time on the Options page.
+        <strong>4. Optional site access.</strong> ${optionalAccessText}
       </li>
       <li>
-        <strong>5. No selling, no ads.</strong> We do not sell your data, use it for advertising, or use it for anything other than running BulkGrab and supporting your purchase.
+        <strong>5. No selling, no ads.</strong> We do not sell your data, use it for advertising, or use it for anything other than running ${appName} and supporting your purchase.
       </li>
       <li>
         <strong>6. Changes and contact.</strong> We may update this policy and will change the date above. Questions or problems: <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>.
       </li>
     </ol>
+
+    <div class="support-box">
+      <h2>Need Help or Support?</h2>
+      <p>If you have questions, feedback, or need assistance activating your Pro license for ${appName}, please email us at:</p>
+      <a class="support-email-link" href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>
+    </div>
   </div>
 </body>
 </html>`;
@@ -198,7 +246,8 @@ export default {
 
     // Privacy policy endpoint (mobile-friendly HTML)
     if ((url.pathname === '/privacy' || url.pathname === '/privacy/') && request.method === 'GET') {
-      return new Response(getPrivacyHtml(), {
+      const product = (url.searchParams.get('product') || '').trim().toLowerCase();
+      return new Response(getPrivacyHtml(product), {
         status: 200,
         headers: {
           'Content-Type': 'text/html; charset=utf-8'
