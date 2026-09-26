@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "BulkGrab - Bulk File Downloader",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Bulk file downloader that detects, selects, and downloads downloadable files from webpages with freemium and ZIP export options.",
   "permissions": [
     "downloads",

@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BulkGrab — The Fastest Bulk File Downloader for Chrome &amp; Edge</title>
+  <meta name="description" content="Detect, filter, and batch download files from any webpage in seconds. Smart category filters, client-side ZIP packaging, and private Web3 crypto payments.">
+  <link rel="icon" type="image/png" href="../assets/icons/icon-48.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Ambient background glow -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+
+  <!-- Navigation -->
+  <header class="navbar">
+    <div class="container nav-content">
+      <a href="#" class="brand">
+        <img src="../assets/icons/icon-48.png" alt="BulkGrab Logo" class="brand-icon">
+        <span class="brand-name">BulkGrab</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How It Works</a>
+        <a href="#pricing">Pricing</a>
+        <a href="mailto:sidoua26@gmail.com">Support</a>
+      </nav>
+      <div class="nav-cta">
+        <a href="https://chromewebstore.google.com" class="btn btn-sm btn-primary">
+          <svg class="chrome-icon" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+            <circle cx="12" cy="12" r="4" fill="currentColor"/>
+          </svg>
+          Add to Chrome
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero-section">
+    <div class="container">
+      <div class="hero-badge">
+        <span class="badge-dot"></span>
+        <span>Version 1.0.2 is Live • Chrome &amp; Edge Extension</span>
+      </div>
+      <h1 class="hero-title">
+        Detect, Filter &amp; Download<br>
+        <span class="gradient-text">Page Files in Seconds</span>
+      </h1>
+      <p class="hero-subtitle">
+        Stop right-clicking and saving links one by one. BulkGrab automatically scans any webpage for documents, images, video, and archives — giving you instant category breakdown and 1-click batch downloads.
+      </p>
+      <div class="hero-actions">
+        <a href="https://chromewebstore.google.com" class="btn btn-lg btn-primary pulse-btn">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Download for Chrome — Free
+        </a>
+        <a href="#features" class="btn btn-lg btn-secondary">
+          Explore Features
+        </a>
+      </div>
+      <div class="hero-meta">
+        <span>⚡ 100% Client-Side Scanning</span>
+        <span class="meta-sep">•</span>
+        <span>🔒 Zero Data Tracking</span>
+        <span class="meta-sep">•</span>
+        <span>🪙 No Credit Card Required</span>
+      </div>
+
+      <!-- Hero Visual / Mockup Preview -->
+      <div class="hero-preview-wrapper">
+        <div class="browser-frame">
+          <div class="browser-header">
+            <div class="browser-dots">
+              <span class="dot dot-red"></span>
+              <span class="dot dot-yellow"></span>
+              <span class="dot dot-green"></span>
+            </div>
+            <div class="browser-address">
+              <svg class="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+              <span>research.portal.org/publications/annual-archive-2026</span>
+            </div>
+            <div class="browser-actions">
+              <div class="mock-ext-icon">
+                <img src="../assets/icons/icon-16.png" alt="">
+                <span class="mock-badge">12</span>
+              </div>
+            </div>
+          </div>
+          <div class="browser-content">
+            <!-- Simulated Page Content -->
+            <div class="mock-page-bg">
+              <div class="mock-content-header">
+                <h2>Project Documentation &amp; Distribution Bundles</h2>
+                <p>Downloadable technical specifications, high-resolution media, and telemetry data archives.</p>
+              </div>
+              <div class="mock-file-grid">
+                <div class="mock-file-card">
+                  <span class="file-pill pill-pdf">PDF</span>
+                  <div class="file-info">
+                    <strong>Architecture_Whitepaper_2026.pdf</strong>
+                    <span>4.2 MB • Research Paper</span>
+                  </div>
+                </div>
+                <div class="mock-file-card">
+                  <span class="file-pill pill-zip">ZIP</span>
+                  <div class="file-info">
+                    <strong>Telemetry_Training_Dataset.zip</strong>
+                    <span>18.5 MB • Distribution Archive</span>
+                  </div>
+                </div>
+                <div class="mock-file-card">
+                  <span class="file-pill pill-img">PNG</span>
+                  <div class="file-info">
+                    <strong>Interface_Overview_HiRes.png</strong>
+                    <span>3.4 MB • Visual Asset</span>
+                  </div>
+                </div>
+                <div class="mock-file-card">
+                  <span class="file-pill pill-media">MP4</span>
+                  <div class="file-info">
+                    <strong>Keynote_Presentation.mp4</strong>
+                    <span>38.0 MB • Media Stream</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Floating BulkGrab Grabber Panel Mockup Overlay -->
+            <div class="floating-panel-mock">
+              <div class="panel-header">
+                <div class="panel-brand">
+                  <img src="../assets/icons/icon-16.png" alt="">
+                  <span>BulkGrab</span>
+                  <span class="mini-badge">FREE</span>
+                </div>
+                <div class="panel-controls">
+                  <span>–</span>
+                  <span>✕</span>
+                </div>
+              </div>
+              <div class="panel-filters">
+                <button class="filter-chip active">All (12)</button>
+                <button class="filter-chip">Docs (4)</button>
+                <button class="filter-chip">Images (4)</button>
+                <button class="filter-chip">Archives (2)</button>
+              </div>
+              <div class="panel-list">
+                <div class="panel-item selected">
+                  <input type="checkbox" checked>
+                  <span class="type-tag tag-pdf">PDF</span>
+                  <span class="item-title">Architecture_Whitepaper_2026.pdf</span>
+                  <span class="item-icon">↗</span>
+                </div>
+                <div class="panel-item selected">
+                  <input type="checkbox" checked>
+                  <span class="type-tag tag-doc">DOCX</span>
+                  <span class="item-title">Compliance_Specification_v3.docx</span>
+                  <span class="item-icon">↗</span>
+                </div>
+                <div class="panel-item selected">
+                  <input type="checkbox" checked>
+                  <span class="type-tag tag-zip">ZIP</span>
+                  <span class="item-title">Telemetry_Training_Dataset.zip</span>
+                  <span class="item-icon">↗</span>
+                </div>
+              </div>
+              <div class="panel-footer">
+                <div class="footer-meta">
+                  <span>3 of 12 selected</span>
+                  <span class="quota-text">Quota: 0/7 used</span>
+                </div>
+                <div class="footer-buttons">
+                  <button class="btn-panel-action primary">Download Selected (3)</button>
+                  <button class="btn-panel-action pro-zip">
+                    <span>🔒 ZIP (PRO)</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Grid Section -->
+  <section class="features-section" id="features">
+    <div class="container">
+      <div class="section-heading text-center">
+        <span class="section-tag">Core Capabilities</span>
+        <h2 class="section-title">Engineered for Rapid Batch Grabbing</h2>
+        <p class="section-desc">
+          Everything you need to extract files from research portals, forums, documentation sites, and asset libraries with zero hassle.
+        </p>
+      </div>
+
+      <div class="features-grid">
+        <!-- Feature 1: 1-Click Bulk Downloads -->
+        <div class="feature-card">
+          <div class="feature-icon-box icon-indigo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </div>
+          <h3 class="feature-title">1-Click Bulk Downloads</h3>
+          <p class="feature-desc">
+            Instantly detect all downloadable files linked on the active page. Download your selections sequentially or in batches directly into your browser's default Downloads directory without repetitive prompts.
+          </p>
+          <div class="feature-pills">
+            <span>PDF</span><span>DOCX</span><span>ZIP</span><span>MP4</span><span>JPG</span>
+          </div>
+        </div>
+
+        <!-- Feature 2: Smart Filtering -->
+        <div class="feature-card">
+          <div class="feature-icon-box icon-cyan">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+          </div>
+          <h3 class="feature-title">Smart Filtering by File Type</h3>
+          <p class="feature-desc">
+            Say goodbye to endless link hunting. Files are automatically classified into Documents, Images, Archives, and Media. Use category filter chips and a real-time search box to isolate matching assets in milliseconds.
+          </p>
+          <div class="feature-pills">
+            <span>Instant Search</span><span>Category Chips</span><span>Select All</span>
+          </div>
+        </div>
+
+        <!-- Feature 3: Pro ZIP Bundling -->
+        <div class="feature-card feature-highlight">
+          <div class="pro-tag">PRO TIER</div>
+          <div class="feature-icon-box icon-purple">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+          </div>
+          <h3 class="feature-title">Client-Side ZIP Bundling</h3>
+          <p class="feature-desc">
+            Combine multiple files from across different domains into a single organized ZIP archive. Packaging happens 100% inside your local browser using client-side WebAssembly and JSZip — your files are never transmitted to our servers.
+          </p>
+          <div class="feature-pills">
+            <span>1-Click Bundle</span><span>No Cloud Upload</span><span>Cross-Domain Fetch</span>
+          </div>
+        </div>
+
+        <!-- Feature 4: Web3 Crypto Payments -->
+        <div class="feature-card">
+          <div class="feature-icon-box icon-amber">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path>
+              <path d="M12 18V6"></path>
+            </svg>
+          </div>
+          <h3 class="feature-title">Web3 Crypto Payments</h3>
+          <p class="feature-desc">
+            Unlock Pro anonymously with a one-time $9.99 payment via USDT on Binance Smart Chain (BEP20) powered by NOWPayments, or redeem an exclusive gift code. No subscriptions, no tracking, no credit card required.
+          </p>
+          <div class="feature-pills">
+            <span>USDT (BEP20)</span><span>$9.99 Lifetime</span><span>Gift Code Support</span>
+          </div>
+        </div>
+
+        <!-- Feature 5: Privacy First -->
+        <div class="feature-card">
+          <div class="feature-icon-box icon-emerald">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+          </div>
+          <h3 class="feature-title">100% Privacy by Design</h3>
+          <p class="feature-desc">
+            BulkGrab scans pages only when invoked. We do not collect, share, or sell your browsing history or page content. Optional cross-site access is strictly used to fetch external files you select for ZIP packaging.
+          </p>
+          <div class="feature-pills">
+            <span>Zero Telemetry</span><span>No Adware</span><span>Audited Permissions</span>
+          </div>
+        </div>
+
+        <!-- Feature 6: Shadow DOM Grabber Panel -->
+        <div class="feature-card">
+          <div class="feature-icon-box icon-blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="9" y1="3" x2="9" y2="21"></line>
+            </svg>
+          </div>
+          <h3 class="feature-title">Isolated Shadow DOM UI</h3>
+          <p class="feature-desc">
+            The floating Grabber panel renders inside an encapsulated Shadow DOM. It never collides with webpage stylesheets, never breaks layout scripts, and can be collapsed or moved around the screen effortlessly.
+          </p>
+          <div class="feature-pills">
+            <span>Encapsulated</span><span>Zero CSS Bleed</span><span>Draggable &amp; Dockable</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works Section -->
+  <section class="how-it-works-section" id="how-it-works">
+    <div class="container">
+      <div class="section-heading text-center">
+        <span class="section-tag">Seamless Workflow</span>
+        <h2 class="section-title">How BulkGrab Works in 3 Steps</h2>
+        <p class="section-desc">Streamline hours of manual downloading into seconds.</p>
+      </div>
+
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-number">01</div>
+          <h3 class="step-title">Navigate &amp; Scan</h3>
+          <p class="step-desc">
+            Visit any webpage with media or document links. BulkGrab scans the DOM automatically and displays the count in the toolbar badge.
+          </p>
+        </div>
+        <div class="step-card">
+          <div class="step-number">02</div>
+          <h3 class="step-title">Filter &amp; Pick</h3>
+          <p class="step-desc">
+            Open the floating Grabber panel. Filter by category (PDF, Images, Archives, Audio) or type into the search bar to find matching files.
+          </p>
+        </div>
+        <div class="step-card">
+          <div class="step-number">03</div>
+          <h3 class="step-title">Download or Bundle</h3>
+          <p class="step-desc">
+            Click <strong>Download Selected</strong> to save files to your computer, or choose <strong>ZIP (PRO)</strong> to package everything into a single archive.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing / Comparison Section -->
+  <section class="pricing-section" id="pricing">
+    <div class="container">
+      <div class="section-heading text-center">
+        <span class="section-tag">Transparent Pricing</span>
+        <h2 class="section-title">Free Forever, or Pro for Life</h2>
+        <p class="section-desc">
+          Generous free quota for everyday tasks. One-time crypto purchase for power users.
+        </p>
+      </div>
+
+      <div class="pricing-grid">
+        <!-- Free Plan -->
+        <div class="pricing-card">
+          <div class="pricing-header">
+            <span class="plan-tag">FREE TIER</span>
+            <h3 class="plan-name">Starter Plan</h3>
+            <div class="plan-price">
+              <span class="price-val">$0</span>
+              <span class="price-period">/ forever</span>
+            </div>
+            <p class="plan-desc">Perfect for downloading occasional documents, images, and papers.</p>
+          </div>
+          <ul class="plan-features">
+            <li><span class="check">✓</span> 7 downloads per browser session</li>
+            <li><span class="check">✓</span> Auto-resets every session</li>
+            <li><span class="check">✓</span> Full DOM file scanner &amp; category breakdown</li>
+            <li><span class="check">✓</span> Single-file sequential downloading</li>
+            <li><span class="check">✓</span> 100% private, no account required</li>
+            <li class="disabled"><span class="cross">✕</span> Unlimited batch downloads</li>
+            <li class="disabled"><span class="cross">✕</span> Client-side ZIP packaging</li>
+          </ul>
+          <a href="https://chromewebstore.google.com" class="btn btn-outline btn-block">
+            Start Free
+          </a>
+        </div>
+
+        <!-- Pro Plan -->
+        <div class="pricing-card pro-card">
+          <div class="popular-ribbon">LIFETIME ACCESS</div>
+          <div class="pricing-header">
+            <span class="plan-tag tag-pro">PRO TIER</span>
+            <h3 class="plan-name">BulkGrab Pro</h3>
+            <div class="plan-price">
+              <span class="price-val">$9.99</span>
+              <span class="price-period">one-time payment</span>
+            </div>
+            <p class="plan-desc">For researchers, developers, and power collectors who need unlimited downloads.</p>
+          </div>
+          <ul class="plan-features">
+            <li><span class="check">✓</span> <strong>Unlimited</strong> batch downloads per session</li>
+            <li><span class="check">✓</span> <strong>Client-side ZIP packaging</strong> (bundle everything)</li>
+            <li><span class="check">✓</span> Cross-origin external asset bundling</li>
+            <li><span class="check">✓</span> Pay anonymously with USDT on BSC (BEP20)</li>
+            <li><span class="check">✓</span> Support for free VIP Gift Codes</li>
+            <li><span class="check">✓</span> No subscription, no recurring fees</li>
+            <li><span class="check">✓</span> Direct priority email support</li>
+          </ul>
+          <a href="https://chromewebstore.google.com" class="btn btn-primary btn-block">
+            Upgrade in Extension
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Banner Section -->
+  <section class="cta-section">
+    <div class="container text-center">
+      <h2 class="cta-title">Ready to Save Hours of Downloading?</h2>
+      <p class="cta-subtitle">Install BulkGrab for Chrome and Edge today. Free, lightweight, and private.</p>
+      <div class="cta-buttons">
+        <a href="https://chromewebstore.google.com" class="btn btn-lg btn-primary pulse-btn">
+          Install BulkGrab Now
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container footer-content">
+      <div class="footer-left">
+        <div class="brand">
+          <img src="../assets/icons/icon-48.png" alt="" class="brand-icon-sm">
+          <span class="brand-name">BulkGrab</span>
+        </div>
+        <p class="footer-desc">
+          The open, client-side bulk file grabber extension for Chrome and Edge.
+        </p>
+      </div>
+      <div class="footer-links">
+        <div class="footer-col">
+          <h4>Product</h4>
+          <a href="#features">Features</a>
+          <a href="#how-it-works">How It Works</a>
+          <a href="#pricing">Pricing</a>
+        </div>
+        <div class="footer-col">
+          <h4>Legal &amp; Trust</h4>
+          <a href="https://bulkgrab-licensing.sidoua26.workers.dev/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+          <a href="https://chromewebstore.google.com" target="_blank" rel="noopener noreferrer">Chrome Web Store</a>
+          <a href="mailto:sidoua26@gmail.com">Contact Support</a>
+        </div>
+      </div>
+    </div>
+    <div class="container footer-bottom">
+      <p>&copy; 2026 BulkGrab. All rights reserved. Support: <a href="mailto:sidoua26@gmail.com">sidoua26@gmail.com</a></p>
+    </div>
+  </footer>
+</body>
+</html>
